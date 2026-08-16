@@ -3,6 +3,12 @@ from pydantic import BaseModel, Field, HttpUrl
 import os
 from pathlib import Path
 from ingest import ingest_file, ingest_url
+
+try:
+    from app.gateway import global_cost_tracker, global_rate_limiter, global_response_cache
+except ModuleNotFoundError:
+    from gateway import global_cost_tracker, global_rate_limiter, global_response_cache
+
 router = APIRouter()
 
 
@@ -26,6 +32,15 @@ os.makedirs(
 )
 
 
+@router.get("/gateway/stats", summary="Get LLM Gateway usage and caching statistics")
+def get_gateway_stats():
+    """Return aggregated cost, token consumption, and cache metrics."""
+    return {
+        "cost_and_usage": global_cost_tracker.get_global_stats(),
+        "cache": global_response_cache.stats(),
+    }
+
+
 @router.post(
     "/upload",
     summary="Upload and index a document or photo",
@@ -38,6 +53,13 @@ async def upload_file(
     file: UploadFile = File(...),
     thread_id: str = "api_user",
 ):
+    allowed, remaining, retry_after = global_rate_limiter.is_allowed(thread_id, endpoint="upload")
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Please retry after {retry_after} seconds.",
+        )
+
     filename = Path(file.filename or "").name
     if not filename:
         raise HTTPException(status_code=400, detail="Please choose a file before uploading.")
@@ -76,6 +98,13 @@ async def upload_file(
 @router.post("/url")
 async def ingest_public_url(request: URLRequest):
     """Index a YouTube transcript or readable text from a public web link."""
+    allowed, remaining, retry_after = global_rate_limiter.is_allowed(request.thread_id, endpoint="url")
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Please retry after {retry_after} seconds.",
+        )
+
     try:
         chunks = ingest_url(str(request.url), session_id=request.thread_id)
     except Exception as error:
@@ -91,10 +120,33 @@ async def ingest_public_url(request: URLRequest):
 @router.post("/query")
 async def query_documents(request: QueryRequest):
     """Answer a question from documents stored in the persistent Chroma index."""
+    allowed, remaining, retry_after = global_rate_limiter.is_allowed(request.thread_id, endpoint="query")
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Please retry after {retry_after} seconds.",
+        )
+
     try:
         # Import lazily so starting the upload API does not initialize the LLM.
         from rag_workflow import graph_app
         from langchain_core.messages import HumanMessage
+
+        try:
+            from app.tracing import get_tracing_config
+        except ModuleNotFoundError:
+            from tracing import get_tracing_config
+
+        tracing_config = get_tracing_config(
+            thread_id=request.thread_id,
+            session_id=request.thread_id,
+            tags=["query", "api"],
+            metadata={
+                "query_type": "document_query",
+                "force_document_retrieval": True,
+            },
+            run_name="API Document Query",
+        )
 
         result = graph_app.invoke(
             {
@@ -103,7 +155,7 @@ async def query_documents(request: QueryRequest):
                 "force_document_retrieval": True,
                 "session_id": request.thread_id,
             },
-            config={"configurable": {"thread_id": request.thread_id}},
+            config=tracing_config,
         )
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Document query failed: {error}") from error

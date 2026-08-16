@@ -24,7 +24,7 @@ def get_vectorstore():
         with _vectorstore_lock:
             if _vectorstore is None:
                 _vectorstore = Chroma(
-                    collection_name="rag_documents",
+                    collection_name="rag_documents_v2",
                     embedding_function=get_embedding_model(),
                     persist_directory=str(PERSIST_DIRECTORY),
                 )

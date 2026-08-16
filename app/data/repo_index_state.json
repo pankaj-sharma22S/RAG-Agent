@@ -1,0 +1,30 @@
+{
+  "test/dummy:main": {
+    "files": {
+      "README.md": "sha_111",
+      "src/app.py": "sha_222"
+    },
+    "last_indexed_at": "2026-08-16T21:00:00Z"
+  },
+  "test_org/test_repo:main": {
+    "files": {
+      "README.md": "sha_blob_111",
+      "app.py": "sha_blob_222"
+    },
+    "last_indexed_at": "2026-08-16T21:00:00Z"
+  },
+  "facebook/react:main": {
+    "files": {
+      "packages/react/index.js": "sha_blob_react_MODIFIED",
+      "packages/react-dom/index.js": "sha_blob_react_002"
+    },
+    "last_indexed_at": "2026-08-16T22:00:00Z"
+  },
+  "pallets/flask:main": {
+    "files": {
+      "src/flask/app.py": "blob_sha_flask_001",
+      "README.md": "blob_sha_flask_002"
+    },
+    "last_indexed_at": "2026-08-16T23:00:00Z"
+  }
+}

@@ -26,3 +26,6 @@ chromadb
 langchain-chroma
 ddgs
 langsmith
+python-dotenv
+litellm
+rank-bm25
