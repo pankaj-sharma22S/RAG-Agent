@@ -1,31 +1,46 @@
-pymupdf
-streamlit
-fastapi
-pydantic
-uvicorn
-python-multipart
-python-docx 
-python-pptx
-openpyxl 
-pandas
-paddleocr
-paddlepaddle
-openai-whisper
-youtube-transcript-api
-langchain-community
-langchain-text-splitters
-sentence-transformers
-qdrant-client
-langgraph 
-langchain
-langchain_google_genai
-IPython
-pygraphviz
-grandalf
-chromadb
-langchain-chroma
-ddgs
-langsmith
-python-dotenv
-litellm
-rank-bm25
+# Core Web Frameworks & UI
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+streamlit>=1.38.0
+
+# Pydantic & Data Validation
+pydantic>=2.8.0
+pydantic-settings>=2.4.0
+
+# LangChain, LangGraph & LangSmith Ecosystem
+langchain==1.3.14
+langchain-core==1.5.0
+langchain-community==0.4.2
+langchain-chroma==1.1.0
+langchain-text-splitters>=0.2.0
+langchain-google-genai>=1.0.0
+langgraph==1.2.9
+langgraph-checkpoint>=2.0.0
+langsmith==0.10.9
+
+# Vector Databases & Embeddings
+chromadb==1.5.9
+qdrant-client>=1.10.0
+sentence-transformers==5.6.0
+transformers>=4.40.0
+torch>=2.2.0
+
+# Keyword Retrieval & Search Tools
+rank-bm25>=0.2.2
+duckduckgo-search>=6.2.0
+
+# Multi-Format Ingestion & Loaders
+pymupdf>=1.24.0
+python-docx>=1.1.0
+python-pptx>=0.6.23
+openpyxl>=3.1.5
+pandas>=2.2.0
+youtube-transcript-api==1.2.4
+
+# LLM Gateway & Resilient Fallback
+litellm>=1.40.0
+
+# Database & Observability
+SQLAlchemy>=2.0.30
+python-dotenv>=1.0.0

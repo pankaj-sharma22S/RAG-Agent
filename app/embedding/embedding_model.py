@@ -5,11 +5,20 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import torch
 from threading import Lock
 from typing import Any
-import torch
 from langchain_core.embeddings import Embeddings
-from langchain_huggingface import HuggingFaceEmbeddings
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+except ModuleNotFoundError:
+    try:
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+    except ModuleNotFoundError as err:
+        raise ModuleNotFoundError(
+            "Neither 'langchain-huggingface' nor 'langchain-community' is installed. "
+            "Please install langchain-huggingface using: pip install langchain-huggingface"
+        ) from err
 
 logger = logging.getLogger("EmbeddingModel")
 
@@ -25,13 +34,16 @@ DEFAULT_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
 _base_embedding_model: HuggingFaceEmbeddings | None = None
 _cached_embeddings_wrapper: CachedEmbeddings | None = None
 _init_lock = Lock()
+_init_count = 0
+_first_init_ms = 0.0
 
 
 class CachedEmbeddings(Embeddings):
     """Thread-safe in-memory caching wrapper around HuggingFaceEmbeddings."""
 
-    def __init__(self, base_embeddings: Embeddings, max_size: int = 10000) -> None:
+    def __init__(self, base_embeddings: Embeddings, model_name: str = DEFAULT_MODEL_NAME, max_size: int = 10000) -> None:
         self.base = base_embeddings
+        self.model_name = model_name
         self.max_size = max_size
         self._cache: dict[str, list[float]] = {}
         self._lock = Lock()
@@ -39,7 +51,8 @@ class CachedEmbeddings(Embeddings):
         self.misses = 0
 
     def _hash(self, text: str) -> str:
-        return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+        key = f"{text.strip()}|{self.model_name}|v1.5"
+        return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
     def embed_query(self, text: str) -> list[float]:
         h = self._hash(text)
@@ -102,11 +115,13 @@ class CachedEmbeddings(Embeddings):
 
 def get_embedding_model() -> CachedEmbeddings:
     """Retrieve or lazily initialize the singleton cached embedding model."""
-    global _base_embedding_model, _cached_embeddings_wrapper
+    global _base_embedding_model, _cached_embeddings_wrapper, _init_count, _first_init_ms
 
     if _cached_embeddings_wrapper is None:
         with _init_lock:
             if _cached_embeddings_wrapper is None:
+                import time
+                t0 = time.perf_counter()
                 model_name = os.getenv("EMBEDDING_MODEL_NAME", DEFAULT_MODEL_NAME)
                 logger.info(f"Initializing embedding model '{model_name}'...")
                 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -115,7 +130,9 @@ def get_embedding_model() -> CachedEmbeddings:
                     model_kwargs={"device": device},
                     encode_kwargs={"batch_size": 64, "normalize_embeddings": True},
                 )
-                _cached_embeddings_wrapper = CachedEmbeddings(_base_embedding_model)
+                _cached_embeddings_wrapper = CachedEmbeddings(_base_embedding_model, model_name=model_name)
+                _first_init_ms = round((time.perf_counter() - t0) * 1000, 2)
+                _init_count += 1
                 # Warm-up call
                 try:
                     _cached_embeddings_wrapper.embed_query("warmup query")
@@ -124,3 +141,14 @@ def get_embedding_model() -> CachedEmbeddings:
                 logger.info(f"Embedding model '{model_name}' initialized on {device} with in-memory caching.")
 
     return _cached_embeddings_wrapper
+
+
+def get_embedding_lifecycle_stats() -> dict[str, Any]:
+    """Return initialization and caching metrics for the embedding engine."""
+    cache_stats = _cached_embeddings_wrapper.stats() if _cached_embeddings_wrapper else {}
+    return {
+        "component": "EmbeddingModel",
+        "initialization_count": _init_count,
+        "first_init_ms": _first_init_ms,
+        "cache": cache_stats,
+    }

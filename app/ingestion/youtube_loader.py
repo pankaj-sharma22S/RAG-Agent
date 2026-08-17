@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from urllib.parse import parse_qs, urlparse
 from langchain_core.documents import Document
-from youtube_transcript_api import YouTubeTranscriptApi
 
 try:
     from app.core.document import create_document
@@ -78,6 +77,14 @@ def extract_timestamp(url: str) -> int | None:
 @safe_traceable(name="Load YouTube Transcript", run_type="chain", tags=["rag-agent", "youtube", "loader"])
 def load_youtube(url: str) -> Document:
     """Download video transcripts safely with multi-language fallback, timestamp parsing, and wrap as untrusted data."""
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except ImportError as err:
+        raise ImportError(
+            "The 'youtube-transcript-api' package is required to load YouTube transcripts. "
+            "Please install it using: pip install youtube-transcript-api"
+        ) from err
+
     video_id = extract_video_id(url)
     timestamp_sec = extract_timestamp(url)
     api = YouTubeTranscriptApi()

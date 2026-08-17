@@ -521,3 +521,87 @@ def get_issues(owner: str, repo: str, state: str = "all", per_page: int = 5) -> 
 def get_file_history(owner: str, repo: str, path: str, branch: str | None = None) -> list[dict[str, Any]]:
     """Fetch commit history modifying a given file (read-only)."""
     return get_commits(owner, repo, path=path, branch=branch, per_page=10)
+
+
+def classify_github_url(url: str) -> tuple[Literal["topic", "repo", "unknown"], dict[str, Any]]:
+    """Determine whether a GitHub URL is a topic aggregation page or a single git repository."""
+    clean_url = url.strip().rstrip("/")
+    if not clean_url.startswith(("http://", "https://")):
+        clean_url = "https://" + clean_url
+
+    parsed = urlparse(clean_url)
+    if "github.com" not in parsed.netloc.lower():
+        return "unknown", {}
+
+    parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if not parts:
+        return "unknown", {}
+
+    if parts[0] == "topics" and len(parts) >= 2:
+        topic_name = parts[1].split("?")[0]
+        return "topic", {"topic": topic_name, "url": clean_url}
+
+    if len(parts) >= 2 and parts[0] != "topics":
+        owner = parts[0]
+        repo = parts[1].split("?")[0]
+        if repo.endswith(".git"):
+            repo = repo[:-4]
+        branch = parts[3] if len(parts) >= 4 and parts[2] == "tree" else None
+        return "repo", {"owner": owner, "repo": repo, "branch": branch, "url": clean_url}
+
+    return "unknown", {}
+
+
+def get_github_topic_data(topic: str, sort: str = "updated", order: str = "desc") -> dict[str, Any]:
+    """Search and aggregate repositories under a GitHub topic (read-only with caching)."""
+    cache_key = f"topic:{topic}:{sort}:{order}"
+    cached = global_github_cache.get(cache_key)
+    if cached:
+        return cached
+
+    url = f"{GITHUB_API_BASE}/search/repositories"
+    params = {
+        "q": f"topic:{topic}",
+        "sort": sort,
+        "order": order,
+        "per_page": 10,
+    }
+    try:
+        resp = requests.get(url, headers=_get_headers(), params=params, timeout=DEFAULT_TIMEOUT)
+        data = _handle_response(resp)
+        items = data.get("items", [])
+        repos = []
+        languages = set()
+        for it in items:
+            lang = it.get("language")
+            if lang:
+                languages.add(lang)
+            repos.append({
+                "full_name": it.get("full_name"),
+                "name": it.get("name"),
+                "owner": it.get("owner", {}).get("login"),
+                "description": it.get("description") or "No description provided",
+                "stars": it.get("stargazers_count", 0),
+                "forks": it.get("forks_count", 0),
+                "language": lang or "N/A",
+                "html_url": it.get("html_url"),
+                "topics": it.get("topics", []),
+                "updated_at": it.get("updated_at"),
+            })
+        result = {
+            "topic": topic,
+            "total_count": data.get("total_count", len(repos)),
+            "repositories": repos,
+            "languages": sorted(list(languages)),
+        }
+        global_github_cache.set(cache_key, result)
+        return result
+    except Exception as err:
+        logger.warning(f"GitHub topic search error for '{topic}': {err}")
+        return {
+            "topic": topic,
+            "total_count": 0,
+            "repositories": [],
+            "languages": [],
+            "error": str(err),
+        }
