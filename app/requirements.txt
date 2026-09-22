@@ -23,12 +23,14 @@ langsmith==0.10.9
 chromadb==1.5.9
 qdrant-client>=1.10.0
 sentence-transformers==5.6.0
+fastembed>=0.3.6
 transformers>=4.40.0
 torch>=2.2.0
 
 # Keyword Retrieval & Search Tools
 rank-bm25>=0.2.2
 duckduckgo-search>=6.2.0
+fastmcp>=2.0.0
 
 # Multi-Format Ingestion & Loaders
 pymupdf>=1.24.0

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from pathlib import Path
 import torch
 from threading import Lock
 from typing import Any
@@ -125,9 +126,15 @@ def get_embedding_model() -> CachedEmbeddings:
                 model_name = os.getenv("EMBEDDING_MODEL_NAME", DEFAULT_MODEL_NAME)
                 logger.info(f"Initializing embedding model '{model_name}'...")
                 device = "cuda" if torch.cuda.is_available() else "cpu"
+                # Prefer an already-downloaded Hugging Face snapshot.  This is
+                # important for the local/offline deployment path: passing the
+                # model id directly makes sentence-transformers probe the Hub
+                # for optional files (such as modules.json), even when the
+                # actual model weights are already cached.
+                resolved_model_name = _resolve_local_model(model_name)
                 _base_embedding_model = HuggingFaceEmbeddings(
-                    model_name=model_name,
-                    model_kwargs={"device": device},
+                    model_name=resolved_model_name,
+                    model_kwargs={"device": device, "local_files_only": True},
                     encode_kwargs={"batch_size": 64, "normalize_embeddings": True},
                 )
                 _cached_embeddings_wrapper = CachedEmbeddings(_base_embedding_model, model_name=model_name)
@@ -141,6 +148,32 @@ def get_embedding_model() -> CachedEmbeddings:
                 logger.info(f"Embedding model '{model_name}' initialized on {device} with in-memory caching.")
 
     return _cached_embeddings_wrapper
+
+
+def _resolve_local_model(model_name: str) -> str:
+    """Resolve a cached Hugging Face model without making a network request."""
+    explicit_path = Path(model_name).expanduser()
+    if explicit_path.is_dir():
+        return str(explicit_path)
+
+    if "/" not in model_name:
+        return model_name
+
+    cache_root = Path(
+        os.getenv("HF_HOME", Path.home() / ".cache" / "huggingface")
+    ) / "hub"
+    cache_dir = cache_root / f"models--{model_name.replace('/', '--')}" / "snapshots"
+    if cache_dir.is_dir():
+        snapshots = sorted(
+            (path for path in cache_dir.iterdir() if path.is_dir()),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        if snapshots:
+            logger.info("Using cached embedding model snapshot: %s", snapshots[0])
+            return str(snapshots[0])
+
+    return model_name
 
 
 def get_embedding_lifecycle_stats() -> dict[str, Any]:

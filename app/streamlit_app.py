@@ -8,11 +8,21 @@ from __future__ import annotations
 import re
 import sys
 import uuid
+import os
 from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
+
+try:
+    from app.memory.schemas import ConversationTurn
+    from app.memory.sqlite_store import SQLiteMemoryStore
+except ImportError:
+    from memory.schemas import ConversationTurn
+    from memory.sqlite_store import SQLiteMemoryStore
+
+memory_store = SQLiteMemoryStore()
 
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
@@ -98,6 +108,8 @@ def new_thread() -> str:
 
 
 def initialise_state() -> None:
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = os.getenv("DEFAULT_USER_ID", "default_user")
     if "threads" not in st.session_state:
         st.session_state.threads = {}
         # Load persistent conversations from database
@@ -129,6 +141,8 @@ def initialise_state() -> None:
             }
             st.session_state.active_thread = first_thread
         st.session_state.upload_version = 0
+    if "pending_question" not in st.session_state:
+        st.session_state.pending_question = None
 
 
 def safe_filename(filename: str) -> str:
@@ -214,6 +228,14 @@ st.markdown(
 )
 
 with st.sidebar:
+    st.markdown("### User Memory")
+    st.text_input(
+        "User ID",
+        key="user_id",
+        help="Persistent semantic preferences and conversation memory are scoped to this ID.",
+    )
+    st.caption("Memory is stored locally in data/memory.db")
+    st.divider()
     st.markdown("### Conversations")
     if st.button("+  New Chat", key="new_thread", type="primary", help="Start a new conversation"):
         add_thread()
@@ -356,8 +378,22 @@ for message in thread["messages"]:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+followups = thread.get("suggested_followups", [])
+if followups:
+    st.caption("Suggested follow-ups")
+    followup_columns = st.columns(len(followups))
+    for index, followup in enumerate(followups):
+        if followup_columns[index].button(followup, key=f"followup_{thread_id}_{index}"):
+            st.session_state.pending_question = followup
+            st.rerun()
+
 # Chat Input Area (supports questions as well as pasted YouTube, GitHub, and Web URLs automatically)
-if question := st.chat_input("Ask a question, or paste a YouTube / GitHub / Web link..."):
+question = st.chat_input("Ask a question, or paste a YouTube / GitHub / Web link...")
+if not question and st.session_state.pending_question:
+    question = st.session_state.pending_question
+    st.session_state.pending_question = None
+
+if question:
     thread["messages"].append({"role": "user", "content": question})
     save_message(thread_id, "user", question)
     
@@ -391,6 +427,21 @@ if question := st.chat_input("Ask a question, or paste a YouTube / GitHub / Web 
 
             response = st.write_stream(answer_stream())
             thread["messages"].append({"role": "assistant", "content": response})
+            followups = [
+                f"What are the key details of {question.strip().rstrip('?!. ')}?",
+                f"What should I investigate next about {question.strip().rstrip('?!. ')}?",
+            ]
+            thread["suggested_followups"] = followups
+            memory_store.add_turn_to_thread(
+                thread_id,
+                st.session_state.user_id or "default_user",
+                ConversationTurn(
+                    user_query=question,
+                    agent_response=response,
+                    suggested_followups=followups,
+                    metadata={"source": "streamlit"},
+                ),
+            )
             save_message(thread_id, "assistant", response)
             save_conversation_metadata(thread_id, biography=thread.get("biography"))
         except Exception as error:

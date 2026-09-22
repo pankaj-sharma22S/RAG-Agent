@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from threading import Lock
 from typing import Any, Literal
@@ -14,9 +15,9 @@ load_dotenv()
 logger = logging.getLogger("ModelRouter")
 
 try:
-    from app.schemas.gateway_schemas import ModelRouteDecision
+    from app.schemas.gateway_schemas import GatewayRoutingDecision, ModelRouteDecision
 except ModuleNotFoundError:
-    from schemas.gateway_schemas import ModelRouteDecision
+    from schemas.gateway_schemas import GatewayRoutingDecision, ModelRouteDecision
 
 
 class ModelRouter:
@@ -138,6 +139,78 @@ class ModelRouter:
             selected_model=primary["model"],
             reason=f"Selected {primary['provider']} for {complexity} task complexity.",
         )
+
+    def route_query(self, query: str, has_internal_context: bool = False) -> GatewayRoutingDecision:
+        """Classify a request into a deterministic retrieval destination and model tier."""
+        text = (query or "").strip()
+        normalized = text.lower()
+
+        mutative_pattern = re.compile(
+            r"\b(delete|drop|remove|destroy|deploy|cancel|revoke|disable|modify|overwrite|truncate|reset|"
+            r"change permissions|grant access|send|publish)\b"
+        )
+        web_pattern = re.compile(
+            r"\b(latest|current|today|now|this week|news|weather|release notes|pricing|transaction fees|"
+            r"stock price|real[- ]time|recent)\b"
+        )
+        internal_pattern = re.compile(
+            r"\b(our|internal|company|uploaded|document|codebase|repository|repo|policy|schema|architecture|"
+            r"vacation|database|splitter\.py|internal file)\b|\.(py|md|pdf|docx|xlsx)\b"
+        )
+        comparison_pattern = re.compile(r"\b(compare|comparison|versus|vs\.?|against|difference between|internal .* and)\b")
+        multimodal_pattern = re.compile(r"\b(image|images|photo|diagram|chart|table|visual|screenshot|figure|pdf scan)\b")
+        deep_pattern = re.compile(r"\b(security audit|vulnerability|penetration|math proof|formal proof|multi-hop|algorithmic planning)\b")
+
+        is_mutative = bool(mutative_pattern.search(normalized))
+        requires_vit = False  # Set after mutative-action classification below.
+        has_internal = bool(internal_pattern.search(normalized)) or has_internal_context
+        needs_web = bool(web_pattern.search(normalized))
+        is_comparison = bool(comparison_pattern.search(normalized))
+
+        if is_mutative:
+            route = "clarification_required"
+            intent = "mutative_action"
+            clarification = "Please confirm the exact target, scope, and intended change before any mutative action is considered."
+        elif is_comparison and has_internal and needs_web:
+            route = "hybrid_crag"
+            intent = "internal_external_comparison"
+            clarification = None
+        elif needs_web:
+            route = "web_search"
+            intent = "current_external_information"
+            clarification = None
+        elif has_internal:
+            route = "internal_rag"
+            intent = "proprietary_or_document_knowledge"
+            clarification = None
+        else:
+            route = "direct_chat"
+            intent = "general_conversation_or_knowledge"
+            clarification = None
+
+        requires_vit = not is_mutative and bool(multimodal_pattern.search(normalized))
+
+        if deep_pattern.search(normalized):
+            tier = "deep_reasoning"
+        elif route in {"internal_rag", "web_search", "hybrid_crag"}:
+            tier = "standard_reasoning"
+        else:
+            tier = "cheap_fast"
+
+        queries = [text] if route in {"internal_rag", "web_search", "hybrid_crag"} and text else []
+        return GatewayRoutingDecision(
+            intent=intent,
+            target_route=route,
+            recommended_model_tier=tier,
+            is_mutative_action=is_mutative,
+            requires_multimodal_vit=requires_vit,
+            rewritten_search_queries=queries,
+            clarification_message=clarification,
+        )
+
+    def route_query_json(self, query: str, has_internal_context: bool = False) -> str:
+        """Return only the parseable JSON routing contract."""
+        return self.route_query(query, has_internal_context).model_dump_json()
 
 
 global_model_router = ModelRouter()

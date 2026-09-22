@@ -27,7 +27,9 @@ try:
         LLMRequest,
         LLMResponse,
         UsageMetadata,
+        GatewayRoutingDecision,
     )
+    from app.guardrails.pii import global_pii_guard
 except ModuleNotFoundError:
     from gateway.cache import global_response_cache
     from gateway.cost_tracker import global_cost_tracker
@@ -38,9 +40,16 @@ except ModuleNotFoundError:
         LLMRequest,
         LLMResponse,
         UsageMetadata,
+        GatewayRoutingDecision,
     )
+    from guardrails.pii import global_pii_guard
 
 logger = logging.getLogger("LLMGateway")
+
+
+def _sanitize_model_content(content: str) -> str:
+    """Apply the shared secret/PII redaction policy at the gateway boundary."""
+    return global_pii_guard.scan_and_mask(content or "").sanitized_text
 
 # LiteLLM configuration
 litellm.drop_params = True
@@ -55,6 +64,14 @@ class LLMGateway:
     def __init__(self) -> None:
         self.default_timeout = float(os.getenv("LLM_TIMEOUT", "30.0"))
         self.max_retries = int(os.getenv("LLM_MAX_RETRIES", "1"))
+
+    def route_query(self, query: str, has_internal_context: bool = False) -> GatewayRoutingDecision:
+        """Return the deterministic semantic route for an incoming user request."""
+        return global_model_router.route_query(query, has_internal_context)
+
+    def route_query_json(self, query: str, has_internal_context: bool = False) -> str:
+        """Return the semantic route as valid JSON only."""
+        return self.route_query(query, has_internal_context).model_dump_json()
 
     def _convert_messages(self, messages: list[Any]) -> list[dict[str, str]]:
         """Convert LangChain messages or dicts to standard role/content dicts."""
@@ -124,7 +141,7 @@ class LLMGateway:
                     cache_hit=True,
                 )
                 return LLMResponse(
-                    content=cached_data["content"],
+                    content=_sanitize_model_content(cached_data["content"]),
                     structured_data=cached_data.get("structured_data"),
                     model=primary_candidate["model"],
                     provider=primary_candidate["provider"],
@@ -182,7 +199,7 @@ class LLMGateway:
                 response = litellm.completion(**litellm_kwargs)
                 duration_ms = (time.time() - start_time) * 1000
 
-                content = response.choices[0].message.content or ""
+                content = _sanitize_model_content(response.choices[0].message.content or "")
                 structured_obj = None
 
                 if request.response_format and issubclass(request.response_format, BaseModel):
@@ -260,7 +277,7 @@ class LLMGateway:
                     try:
                         response = litellm.completion(**litellm_kwargs)
                         duration_ms = (time.time() - start_time) * 1000
-                        content = response.choices[0].message.content or ""
+                        content = _sanitize_model_content(response.choices[0].message.content or "")
                         structured_obj = None
                         if request.response_format and issubclass(request.response_format, BaseModel):
                             try:
@@ -342,10 +359,16 @@ class LLMGateway:
                     litellm_kwargs["thinking"] = {"type": "disabled"}
 
                 response = litellm.completion(**litellm_kwargs)
+                streamed_content: list[str] = []
                 for chunk in response:
                     delta = chunk.choices[0].delta.content or ""
                     if delta:
-                        yield delta
+                        streamed_content.append(delta)
+                # Buffer before yielding so secrets split across token chunks
+                # cannot bypass the shared redaction policy.
+                safe_stream = _sanitize_model_content("".join(streamed_content))
+                if safe_stream:
+                    yield safe_stream
                 return
             except Exception as error:
                 err_str = str(error).lower()
@@ -354,10 +377,14 @@ class LLMGateway:
                     time.sleep(2.1)
                     try:
                         response = litellm.completion(**litellm_kwargs)
+                        streamed_content = []
                         for chunk in response:
                             delta = chunk.choices[0].delta.content or ""
                             if delta:
-                                yield delta
+                                streamed_content.append(delta)
+                        safe_stream = _sanitize_model_content("".join(streamed_content))
+                        if safe_stream:
+                            yield safe_stream
                         return
                     except Exception as retry_err:
                         error = retry_err

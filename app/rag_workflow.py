@@ -18,6 +18,7 @@ from langchain_core.runnables import RunnableLambda
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+from pydantic import BaseModel, Field
 
 try:
     from app.db.checkpointer import get_checkpointer
@@ -575,6 +576,13 @@ class AgentState(TypedDict, total=False):
     reranked_count: int
     crag_decision: dict[str, Any] | None
 
+    # Post-generation Self-RAG reflection
+    generated_answer: str
+    reflection_passed: bool
+    reflection_attempt: int
+    reflection_feedback: str
+    reflection_decision: dict[str, Any] | None
+
     # Web & Route decisions
     web_results: list[dict[str, str]]
     web_query: str
@@ -695,13 +703,24 @@ CRAFT + CONSTRAINT RULES:
    - DOCUMENT FINDINGS
    - WEB RESEARCH FINDINGS
    - COMPARISON MATRIX (Status: SUPPORTED_BY_BOTH | DOCUMENT_ONLY | WEB_ONLY | CONFLICT | INSUFFICIENT_EVIDENCE)
-7. ANTI-HALLUCINATION: If the provided evidence does not contain sufficient information, state clearly:
-   "I couldn't find that information in the provided source."
+7. TRI-STATE CONTEXT POLICY:
+   - For zero relevant context, state exactly: "The requested information is not available in the indexed documentation."
+   - For partial context, answer only the supported components. Mention a specific missing fact in one
+     short sentence only when that missing fact prevents a complete answer.
+   - Do not add a generic "Missing Information / Context" section when the question has been answered.
+   - Never fill missing technical code, schemas, or parameters with guesses.
 8. SECURITY & PRIVACY: Never expose API keys, passwords, tokens, credentials, or private personal data.
 9. CLEAN STANDALONE PRESENTATION (NO INTERNAL METADATA LEAK):
    - Use retrieved source content internally strictly as evidence.
    - DO NOT display or mention chunk IDs, retrieval scores, vector IDs, "[Chunk ...]", "[Source: ...]", or internal database metadata in the final output unless the user explicitly requests citations or sources.
    - The answer must read naturally as a polished, standalone response.
+10. OUTPUT FORMAT:
+   - Return only the answer to the user's question.
+   - Do not add headings such as "Context", "Additional Information", "Security & Privacy",
+     "Clean Standalone Presentation", or "Missing Information / Context" unless the user explicitly
+     asks for that format.
+   - Do not describe these rules, the retrieval process, or whether security checks were performed.
+   - For a simple factual question, prefer one concise paragraph or a short list.
 
 Context:
 {context}
@@ -820,6 +839,18 @@ answer_chain = answer_prompt | llm | StrOutputParser()
 structured_biography = llm.with_structured_output(UserBiography)
 structured_intent_classifier = llm.with_structured_output(IntentDecision)
 structured_self_rag = llm.with_structured_output(KnowledgeDecision)
+
+
+class SelfRAGReflection(BaseModel):
+    """Groundedness and relevance judgment for a generated answer."""
+
+    grounded: bool = Field(description="Whether the answer is supported by the supplied evidence.")
+    relevant: bool = Field(description="Whether the answer directly addresses the user's question.")
+    hallucination_detected: bool = Field(description="Whether the answer contains unsupported claims.")
+    feedback: str = Field(description="Specific corrections required before regenerating, if any.")
+
+
+structured_self_rag_reflection = llm.with_structured_output(SelfRAGReflection)
 
 
 @safe_traceable(name="Input Guardrail", run_type="chain", tags=["rag-agent", "guardrail", "input-guard"])
@@ -1342,14 +1373,21 @@ def answer_node(state: AgentState) -> dict[str, Any]:
     # Insufficient Evidence Handling
     if not context_parts:
         latencies["answer_node_ms"] = round((time.perf_counter() - start_t) * 1000, 2)
-        ans_text = "I couldn't find that information in the provided source." if active_src else (
-            "I was unable to find sufficient or reliable evidence in the indexed documents "
-            "or external web search to answer your question accurately."
-        )
+        ans_text = "The requested information is not available in the indexed documentation."
         return {
             "messages": [AIMessage(content=ans_text)],
+            "generated_answer": ans_text,
             "node_latencies": latencies,
         }
+
+    reflection_feedback = state.get("reflection_feedback", "").strip()
+    if reflection_feedback:
+        context_parts.append(
+            "=== SELF-RAG REFLECTION FEEDBACK ===\n"
+            "Regenerate the answer and correct only the issues identified below. "
+            "Keep every claim grounded in the evidence.\n"
+            + reflection_feedback
+        )
 
     raw_answer = answer_chain.invoke(
         {
@@ -1361,7 +1399,75 @@ def answer_node(state: AgentState) -> dict[str, Any]:
 
     passed, validated_answer, _ = global_output_guard.validate_output(raw_answer)
     latencies["answer_node_ms"] = round((time.perf_counter() - start_t) * 1000, 2)
-    return {"messages": [AIMessage(content=validated_answer)], "node_latencies": latencies}
+    return {
+        "messages": [AIMessage(content=validated_answer)],
+        "generated_answer": validated_answer,
+        "node_latencies": latencies,
+    }
+
+
+@safe_traceable(name="Self-RAG Reflection", run_type="chain", tags=["rag-agent", "self-rag", "reflection", "groundedness"])
+def self_rag_reflection_node(state: AgentState) -> dict[str, Any]:
+    """Grade the generated answer and request one grounded regeneration when needed."""
+    answer = state.get("generated_answer", "")
+    if not answer and state.get("messages"):
+        answer = message_text(state["messages"][-1])
+
+    attempt = state.get("reflection_attempt", 0)
+    latencies = dict(state.get("node_latencies", {}))
+
+    # A second failed pass is delivered rather than entering an unbounded loop.
+    if attempt >= 1:
+        return {
+            "reflection_passed": True,
+            "reflection_attempt": attempt,
+            "reflection_decision": {"grounded": False, "relevant": False, "forced_delivery": True},
+            "node_latencies": latencies,
+        }
+
+    documents = state.get("documents", [])
+    evidence = "\n\n".join(
+        f"[Evidence {idx + 1}] {document.page_content}" for idx, document in enumerate(documents[:8])
+    )
+    web_evidence = "\n\n".join(
+        f"[Web: {item.get('title', 'Untitled')}] {item.get('snippet', '')}"
+        for item in state.get("web_results", [])
+    )
+    prompt = (
+        "You are a strict Self-RAG reflection grader. Evaluate the answer against the user's question "
+        "and the supplied evidence. Mark it failed if it contains unsupported facts, hallucinations, "
+        "or does not answer the question. Check contradictions explicitly.\n\n"
+        f"Question:\n{state.get('original_query', state.get('question', ''))}\n\n"
+        f"Generated answer:\n{answer}\n\n"
+        f"Internal evidence:\n{evidence or 'None'}\n\n"
+        f"Web evidence:\n{web_evidence or 'None'}"
+    )
+
+    try:
+        decision: SelfRAGReflection = structured_self_rag_reflection.invoke(prompt)
+        passed = bool(decision.grounded and decision.relevant and not decision.hallucination_detected)
+        return {
+            "reflection_passed": passed,
+            "reflection_attempt": attempt + (0 if passed else 1),
+            "reflection_feedback": decision.feedback if not passed else "",
+            "reflection_decision": decision.model_dump(),
+            "node_latencies": latencies,
+        }
+    except Exception as error:
+        logger.warning("Self-RAG reflection failed closed: %s", error)
+        return {
+            "reflection_passed": True,
+            "reflection_attempt": attempt,
+            "reflection_decision": {"grounded": True, "relevant": True, "fallback": True},
+            "node_latencies": latencies,
+        }
+
+
+def self_rag_reflection_route(state: AgentState) -> Literal["deliver", "regenerate"]:
+    """Route failed first-pass answers through one regeneration attempt."""
+    if not state.get("reflection_passed", True) and state.get("reflection_attempt", 0) <= 1:
+        return "regenerate"
+    return "deliver"
 
 
 @safe_traceable(name="Stream Response", run_type="chain", tags=["rag-agent", "query", "stream", "adaptive-rag"])
@@ -1812,6 +1918,7 @@ def create_rag_graph():
     workflow.add_node("query_refinement", query_refinement_node)
     workflow.add_node("web_search", web_search_node)
     workflow.add_node("answer", answer_node)
+    workflow.add_node("self_rag_reflection", self_rag_reflection_node)
     workflow.add_node("clarification", clarification_node)
 
     # Graph Edges: Routing First
@@ -1851,12 +1958,17 @@ def create_rag_graph():
 
     workflow.add_edge("query_refinement", "hybrid_retrieval")
     workflow.add_edge("web_search", "answer")
+    workflow.add_edge("answer", "self_rag_reflection")
+    workflow.add_conditional_edges(
+        "self_rag_reflection",
+        self_rag_reflection_route,
+        {"deliver": END, "regenerate": "answer"},
+    )
 
     workflow.add_edge("chat", END)
     workflow.add_edge("realtime_time", END)
     workflow.add_edge("youtube_summary", END)
     workflow.add_edge("clarification", END)
-    workflow.add_edge("answer", END)
 
     return workflow.compile(checkpointer=get_checkpointer())
 

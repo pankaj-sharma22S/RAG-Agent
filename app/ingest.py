@@ -132,14 +132,26 @@ def ingest_document(document, session_id: str):
 def ingest_file(file_path: str, session_id: str, lazy: bool = False):
     """Load, scan, and index an uploaded document or media file."""
     try:
-        document = load_document(file_path)
+        documents = load_document(file_path)
     except Exception as e:
         raise RuntimeError(f"Failed loading {file_path}: {e}") from e
 
-    register_active_source(document, session_id)
-    if not lazy:
-        return ingest_document(document, session_id)
-    return document
+    if not documents:
+        raise RuntimeError(f"No documents were produced while loading {file_path}")
+
+    # LangChain loaders may return one document per page/sheet/record. Keep
+    # those atomic units intact while preserving the existing single-document
+    # ingestion API used by the rest of the application.
+    for document in documents:
+        register_active_source(document, session_id)
+
+    if lazy:
+        return documents
+
+    chunks = []
+    for document in documents:
+        chunks.extend(ingest_document(document, session_id))
+    return chunks
 
 
 @safe_traceable(name="Ingest URL", run_type="chain", tags=["rag-agent", "ingestion", "url"])

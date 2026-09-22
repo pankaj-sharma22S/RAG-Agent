@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 from langchain_core.documents import Document
 
@@ -137,10 +138,27 @@ def load_youtube(url: str) -> Document:
             error_reasons.append(str(e2))
 
     if not snippets_text.strip():
+        joined_errors = "; ".join(error_reasons[:2])
+        network_failure = any(
+            marker in joined_errors
+            for marker in (
+                "HTTPSConnectionPool",
+                "MaxRetryError",
+                "NewConnectionError",
+                "WinError 10013",
+                "ConnectionError",
+            )
+        )
+        if network_failure:
+            raise RuntimeError(
+                f"Could not reach YouTube while loading video '{video_id}'. "
+                "Check firewall/proxy/network access to www.youtube.com and try again. "
+                f"Details: {joined_errors}"
+            )
         raise ValueError(
             f"YouTube transcript unavailable for video '{video_id}'. "
             f"The video may have captions disabled, be private, or be region-restricted. "
-            f"(Details: {'; '.join(error_reasons[:1])})"
+            f"(Details: {joined_errors})"
         )
 
     # 1. Content Security Scan: Redact passwords, API keys, private keys, connection strings, PII

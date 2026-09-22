@@ -29,6 +29,19 @@ SECRET_AND_PII_PATTERNS = {
     "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
 }
 
+REDACTION_LABELS = {
+    "private_key": "[REDACTED_SECRET]",
+    "password": "[REDACTED_PASSWORD]",
+    "connection_string": "[REDACTED_SECRET]",
+    "bearer_token": "[REDACTED_SECRET]",
+    "api_key": "[REDACTED_API_KEY]",
+    "jwt_token": "[REDACTED_SECRET]",
+    "email": "<EMAIL_1>",
+    "phone": "<PHONE_1>",
+    "credit_card": "[REDACTED_SECRET]",
+    "ssn": "[REDACTED_SSN]",
+}
+
 
 class PIIGuard:
     """Thread-safe content scanner that detects, classifies, and redacts sensitive credentials and PII."""
@@ -60,7 +73,7 @@ class PIIGuard:
                     val_start = match.start(1)
                     val_end = match.end(1)
                     original_val = match.group(1)
-                    mask_label = "[REDACTED]"
+                    mask_label = REDACTION_LABELS["password"]
                     entity = PIIEntity(
                         entity_type="password",  # type: ignore
                         original_text=original_val,
@@ -71,7 +84,7 @@ class PIIGuard:
                     entities.append(entity)
                 else:
                     original = match.group(0)
-                    mask_label = f"[{entity_type.upper()}_REDACTED]" if entity_type != "password" else "[REDACTED]"
+                    mask_label = REDACTION_LABELS.get(entity_type, "[REDACTED_SECRET]")
                     entity = PIIEntity(
                         entity_type=entity_type,  # type: ignore
                         original_text=original,

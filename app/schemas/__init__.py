@@ -3,6 +3,7 @@
 from .gateway_schemas import (
     CostRecord,
     FallbackDecision,
+    GatewayRoutingDecision,
     LLMRequest,
     LLMResponse,
     ModelRouteDecision,
@@ -37,6 +38,7 @@ __all__ = [
     "FallbackDecision",
     "UsageMetadata",
     "CostRecord",
+    "GatewayRoutingDecision",
     "PIIEntity",
     "PIIResult",
     "InjectionResult",

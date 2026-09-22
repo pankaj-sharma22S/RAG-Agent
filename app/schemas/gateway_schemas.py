@@ -58,6 +58,24 @@ class ModelRouteDecision(BaseModel):
     reason: str = Field(description="Rationale for selected route.")
 
 
+class GatewayRoutingDecision(BaseModel):
+    """Deterministic semantic-routing decision for an incoming user request."""
+
+    intent: str
+    target_route: Literal[
+        "direct_chat",
+        "internal_rag",
+        "web_search",
+        "hybrid_crag",
+        "clarification_required",
+    ]
+    recommended_model_tier: Literal["cheap_fast", "standard_reasoning", "deep_reasoning"]
+    is_mutative_action: bool
+    requires_multimodal_vit: bool
+    rewritten_search_queries: list[str] = Field(default_factory=list)
+    clarification_message: str | None = None
+
+
 class LLMResponse(BaseModel):
     """Standardized response envelope returned by the LLM Gateway."""
 
