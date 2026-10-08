@@ -107,12 +107,13 @@ async def ingest_public_url(request: URLRequest):
 
     try:
         chunks = ingest_url(str(request.url), session_id=request.thread_id)
+        chunk_count = len(chunks) if isinstance(chunks, list) else 1
     except Exception as error:
         raise HTTPException(status_code=400, detail=f"Link ingestion failed: {error}") from error
 
     return {
         "url": str(request.url),
-        "chunks_indexed": len(chunks),
+        "chunks_indexed": chunk_count,
         "status": "indexed",
     }
 

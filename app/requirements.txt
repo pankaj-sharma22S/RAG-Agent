@@ -2,7 +2,8 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
-streamlit>=1.38.0
+pyjwt[crypto]>=2.9.0
+beautifulsoup4>=4.12.0
 
 # Pydantic & Data Validation
 pydantic>=2.8.0
@@ -46,3 +47,4 @@ litellm>=1.40.0
 # Database & Observability
 SQLAlchemy>=2.0.30
 python-dotenv>=1.0.0
+redis>=5.0.0

@@ -1,0 +1,82 @@
+services:
+
+  frontend:
+    build: ./ui
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend1
+
+
+  backend1:
+    build: ./app
+    expose:
+      - "8001:8000"
+
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=sqlite:///./data/dev.db
+
+    depends_on:
+      - redis
+
+    volumes:
+      - ./app/data:/app/data
+
+
+  backend2:
+    build: ./app
+    expose:
+      - "8002:8000"
+
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=sqlite:///./data/dev.db
+
+    depends_on:
+      - redis
+
+    volumes:
+      - ./app/data:/app/data
+
+
+  backend3:
+    build: ./app
+    expose:
+      - "8003:8000"
+
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=sqlite:///./data/dev.db
+
+    depends_on:
+      - redis
+
+    volumes:
+      - ./app/data:/app/data
+
+
+  nginx:
+    image: nginx:alpine
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+
+  redis:
+    image: redis:7-alpine
+
+    ports:
+      - "6379:6379"
+
+    restart: always
+

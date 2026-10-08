@@ -1,39 +1,144 @@
-# Environment / secrets
+# =========================
+
+# Environment / Secrets
+
+# =========================
+
 .env
 .env.*
 !.env.example
 
+# =========================
+
 # Python
-__pycache__/
+
+# =========================
+
+**pycache**/
 *.py[cod]
 *.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Virtual environment
+# Virtual environments
+
 venv/
 .venv/
 env/
 
-# IDE
+# =========================
+
+# FastAPI / Application Data
+
+# =========================
+
+*.db
+*.sqlite
+*.sqlite3
+
+app/data/
+data/
+
+# =========================
+
+# RAG / Vector Database
+
+# =========================
+
+chroma/
+chroma_db/
+local_vector_db/
+
+# =========================
+
+# Frontend
+
+# =========================
+
+node_modules/
+dist/
+build/
+.vite/
+
+# npm logs
+
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# =========================
+
+# Docker
+
+# =========================
+
+docker-compose.override.yml
+
+# =========================
+
+# IDE / Editors
+
+# =========================
+
 .vscode/
 .idea/
 
-# Logs
-*.log
-streamlit.log
-streamlit-error.log
+# =========================
 
-# Uploaded/generated data
-app/data/uploads/
-data/uploads/
+# OS files
 
-# Local vector databases
-local_vector_db/
+# =========================
 
-# Python caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# =========================
+
+# Logs
+
+# =========================
+
+*.log
+logs/
+
+# =========================
+
+# Temporary files
+
+# =========================
+
+*.tmp
+*.temp
+*.swp
+*.bak
+*.cache
+.cache/
+
+# =========================
+
+# Testing
+
+# =========================
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+
+# Generated files
+
+# =========================
+
+uploads/
+outputs/
+tmp/
+temp/
+EOF
+*.zip
+*.tar
+*.tar.gz

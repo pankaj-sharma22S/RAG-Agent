@@ -1685,7 +1685,7 @@ def stream_response(
 
     # Route C4: GITHUB REPOSITORY DEEP ANALYSIS ("https://github.com/owner/repo", etc.)
     if route == "github_repo":
-        from tools.github_tools import classify_github_url, get_repository, get_readme, get_tree, get_file_content
+        from tools.github_tools import classify_github_url, get_repository, get_readme, get_repository_tree, get_file
         owner, repo = "", ""
         if active_src and active_src.get("source_type") == "github_repo":
             owner = active_src.get("owner", "")
@@ -1706,23 +1706,25 @@ def stream_response(
         tree_files = []
         key_files_content = {}
 
-        try:
-            repo_info = get_repository(owner, repo)
-            readme_content = get_readme(owner, repo)
-            tree_data = get_tree(owner, repo, recursive=True)
-            tree_files = [f.get("path", "") for f in tree_data.get("tree", []) if f.get("type") == "blob"]
-        except Exception as gh_fetch_err:
-            logger.warning(f"Error fetching GitHub repo metadata: {gh_fetch_err}")
+        if owner and repo:
+            try:
+                repo_info = get_repository(owner, repo)
+                readme_content = get_readme(owner, repo)
+                tree_data = get_repository_tree(owner, repo, recursive=True)
+                if isinstance(tree_data, list):
+                    tree_files = [f.get("path", "") for f in tree_data if isinstance(f, dict) and f.get("type") == "blob"]
+            except Exception as gh_fetch_err:
+                logger.warning(f"Error fetching GitHub repo metadata: {gh_fetch_err}")
 
-        # Fetch important config / entrypoint files
-        for target_file in ["package.json", "requirements.txt", "pyproject.toml", "Dockerfile", "main.py", "app.py", "index.js", "server.js", "go.mod", "Cargo.toml"]:
-            if target_file in tree_files:
-                try:
-                    f_data = get_file_content(owner, repo, target_file)
-                    if f_data.get("content"):
-                        key_files_content[target_file] = f_data["content"][:2000]
-                except Exception:
-                    pass
+            # Fetch important config / entrypoint files
+            for target_file in ["package.json", "requirements.txt", "pyproject.toml", "Dockerfile", "main.py", "app.py", "index.js", "server.js", "go.mod", "Cargo.toml", "README.md"]:
+                if target_file in tree_files:
+                    try:
+                        f_text = get_file(owner, repo, target_file)
+                        if f_text and not f_text.startswith("[Binary"):
+                            key_files_content[target_file] = f_text[:3000]
+                    except Exception:
+                        pass
 
         repo_prompt_text = (
             f"You are a principal software architect and GitHub code reviewer.\n"
@@ -1925,10 +1927,9 @@ def create_rag_graph():
     workflow.add_edge(START, "input_guard")
     workflow.add_edge("input_guard", "router")
 
-    workflow.add_conditional_edges(
-        "router",
-        lambda state: state["route"],
-        {
+    def safe_router_route(state: AgentState) -> str:
+        r = str(state.get("route") or "general_chat")
+        route_map = {
             "fast_chat": "chat",
             "general_chat": "chat",
             "memory": "profile",
@@ -1937,22 +1938,49 @@ def create_rag_graph():
             "youtube_summary": "youtube_summary",
             "youtube_question": "hybrid_retrieval",
             "document_rag": "hybrid_retrieval",
+            "document_summary": "hybrid_retrieval",
+            "github_topic": "web_search",
+            "github_repo": "chat",
+            "github_summary": "chat",
             "web_research": "web_search",
             "clarify": "clarification",
+        }
+        return route_map.get(r, "hybrid_retrieval" if ("doc" in r or "rag" in r or "summary" in r) else "chat")
+
+    workflow.add_conditional_edges(
+        "router",
+        safe_router_route,
+        {
+            "chat": "chat",
+            "profile": "profile",
+            "realtime_time": "realtime_time",
+            "web_search": "web_search",
+            "youtube_summary": "youtube_summary",
+            "hybrid_retrieval": "hybrid_retrieval",
+            "clarification": "clarification",
         },
     )
 
     workflow.add_edge("profile", "chat")
     workflow.add_edge("hybrid_retrieval", "crag_evaluation")
 
-    workflow.add_conditional_edges(
-        "crag_evaluation",
-        lambda state: state["route"],
-        {
+    def safe_crag_route(state: AgentState) -> str:
+        r = str(state.get("route") or "answer")
+        crag_map = {
             "answer": "answer",
             "refine": "query_refinement",
             "web": "web_search",
             "combined": "web_search",
+        }
+        return crag_map.get(r, "answer")
+
+    workflow.add_conditional_edges(
+        "crag_evaluation",
+        safe_crag_route,
+        {
+            "answer": "answer",
+            "query_refinement": "query_refinement",
+            "web_search": "web_search",
         },
     )
 

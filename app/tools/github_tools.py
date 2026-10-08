@@ -605,3 +605,8 @@ def get_github_topic_data(topic: str, sort: str = "updated", order: str = "desc"
             "languages": [],
             "error": str(err),
         }
+
+
+# Export function aliases for backward compatibility and MCP dispatching
+get_tree = get_repository_tree
+get_file_content = get_file

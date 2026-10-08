@@ -38,7 +38,11 @@ except ModuleNotFoundError:
 
 try:
     from app.mcp.tools_mcp import mcp_registry
-    from app.tools.github_tools import parse_github_url
+    from app.tools.github_tools import (
+        classify_github_url,
+        get_github_topic_data,
+        parse_github_url,
+    )
     from app.agents.schemas import (
         CodeStructureAnalysis,
         DocumentationComparison,
@@ -47,7 +51,11 @@ try:
     )
 except ModuleNotFoundError:
     from mcp.tools_mcp import mcp_registry
-    from tools.github_tools import parse_github_url
+    from tools.github_tools import (
+        classify_github_url,
+        get_github_topic_data,
+        parse_github_url,
+    )
     from agents.schemas import (
         CodeStructureAnalysis,
         DocumentationComparison,
@@ -67,6 +75,9 @@ class GitHubAnalyzerState(TypedDict, total=False):
     branch: str | None
     focus_query: str
     thread_id: str
+    is_topic: bool
+    topic_name: str
+    topic_data: dict[str, Any]
     repo_info: dict[str, Any]
     tree: list[dict[str, Any]]
     readme_content: str
@@ -91,8 +102,37 @@ structured_report_generator = llm.with_structured_output(StructuredAnalysisRepor
 
 @safe_traceable(name="Validate & Discover Repository", run_type="tool", tags=["github-analyzer", "discovery"])
 def validate_and_discover_node(state: GitHubAnalyzerState) -> dict[str, Any]:
-    """Validate GitHub URL, fetch repo metadata, branch list, and recursive file tree."""
+    """Validate GitHub URL, fetch repo metadata or topic aggregation data, and file tree."""
     url = state.get("repo_url", "").strip()
+    url_type, meta = classify_github_url(url)
+
+    if url_type == "topic":
+        topic_name = meta.get("topic", "general")
+        topic_data = get_github_topic_data(topic_name)
+        repos = topic_data.get("repositories", [])
+        total_stars = sum(r.get("stars", 0) for r in repos)
+        languages_str = ", ".join(topic_data.get("languages", [])) or "Multi-language"
+
+        return {
+            "is_topic": True,
+            "topic_name": topic_name,
+            "topic_data": topic_data,
+            "owner": "topics",
+            "repo": topic_name,
+            "branch": "main",
+            "repo_info": {
+                "full_name": f"topics/{topic_name}",
+                "description": f"GitHub Topic: '{topic_name}' containing {topic_data.get('total_count', len(repos))} repositories",
+                "stargazers_count": total_stars,
+                "stars": total_stars,
+                "language": languages_str,
+                "default_branch": "main",
+            },
+            "branches": [],
+            "tree": [],
+            "error": None,
+        }
+
     try:
         owner, repo, branch_from_url = parse_github_url(url)
     except Exception as error:
@@ -114,13 +154,13 @@ def validate_and_discover_node(state: GitHubAnalyzerState) -> dict[str, Any]:
             {"owner": owner, "repo": repo, "branch": target_branch, "recursive": True},
         )
         if isinstance(tree, dict) and "error" in tree:
-            # Fallback non-recursive
             tree = mcp_registry.call_tool(
                 "github_get_repository_tree",
                 {"owner": owner, "repo": repo, "branch": target_branch, "recursive": False},
             )
 
         return {
+            "is_topic": False,
             "owner": owner,
             "repo": repo,
             "branch": target_branch,
@@ -136,7 +176,7 @@ def validate_and_discover_node(state: GitHubAnalyzerState) -> dict[str, Any]:
 @safe_traceable(name="Analyze Documentation", run_type="chain", tags=["github-analyzer", "documentation"])
 def analyze_documentation_node(state: GitHubAnalyzerState) -> dict[str, Any]:
     """Fetch and inspect the README and key documentation files."""
-    if state.get("error"):
+    if state.get("error") or state.get("is_topic"):
         return {}
 
     owner = state["owner"]
@@ -383,6 +423,51 @@ def generate_report_node(state: GitHubAnalyzerState) -> dict[str, Any]:
             "markdown_report": markdown,
         }
 
+    if state.get("is_topic"):
+        topic_name = state.get("topic_name", "general")
+        topic_data = state.get("topic_data", {})
+        repos = topic_data.get("repositories", [])
+        languages = topic_data.get("languages", [])
+
+        md_lines = [
+            f"# 🌐 GitHub Topic Ecosystem Report: `{topic_name}`",
+            f"**Total Aggregated Repositories:** {topic_data.get('total_count', len(repos))} | **Dominant Languages:** {', '.join(languages) or 'Multi-language'}",
+            "",
+            "## 1. Topic Overview",
+            f"The GitHub topic `{topic_name}` groups open-source projects, tools, and libraries focused on {topic_name}. Below is an architectural overview of the top rated projects discovered in this domain.",
+            "",
+            "## 2. Top Repositories in this Ecosystem",
+        ]
+
+        for r in repos[:8]:
+            md_lines.extend([
+                f"### 📦 [{r['full_name']}]({r['html_url']})",
+                f"- **Stars:** ⭐ {r['stars']:,} | **Forks:** 🍴 {r['forks']:,} | **Primary Language:** `{r['language']}`",
+                f"- **Description:** {r['description']}",
+                f"- **Topics:** {', '.join(f'`{t}`' for t in r.get('topics', [])) or 'None'}",
+                "",
+            ])
+
+        md_lines.extend([
+            "## 3. Key Ecosystem Insights & Recommendations",
+            f"- **Primary Stacks:** The most active repositories under `{topic_name}` predominantly use {', '.join(languages[:4]) or 'modern languages'}.",
+            "- **Integration Potential:** You can query any individual repository from this list by pasting its direct repository URL into the analyzer.",
+            "- **Next Steps:** Review the README and repository structure of top-starred projects to adopt standard patterns in this domain.",
+        ])
+
+        markdown_report = "\n".join(md_lines)
+        return {
+            "structured_report": {
+                "repo_name": f"topics/{topic_name}",
+                "overview": f"GitHub topic discovery report for {topic_name}",
+                "architecture": f"Ecosystem comprising {len(repos)} top active repositories across {', '.join(languages)}.",
+                "tech_stack": languages,
+                "findings": [],
+                "recommendations": ["Explore individual repository codebases for deep inspection."],
+            },
+            "markdown_report": markdown_report,
+        }
+
     owner = state.get("owner", "")
     repo = state.get("repo", "")
     repo_info = state.get("repo_info", {})
@@ -513,7 +598,7 @@ def create_github_analyzer_graph():
     workflow.add_edge(START, "validate_and_discover")
     workflow.add_conditional_edges(
         "validate_and_discover",
-        lambda state: "generate_report" if state.get("error") else "analyze_documentation",
+        lambda state: "generate_report" if (state.get("error") or state.get("is_topic")) else "analyze_documentation",
         {"generate_report": "generate_report", "analyze_documentation": "analyze_documentation"},
     )
     workflow.add_edge("analyze_documentation", "identify_important_code")

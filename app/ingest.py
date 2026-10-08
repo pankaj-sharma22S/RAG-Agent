@@ -155,7 +155,7 @@ def ingest_file(file_path: str, session_id: str, lazy: bool = False):
 
 
 @safe_traceable(name="Ingest URL", run_type="chain", tags=["rag-agent", "ingestion", "url"])
-def ingest_url(url: str, session_id: str, lazy: bool = True):
+def ingest_url(url: str, session_id: str, lazy: bool = False):
     """Download, scan, and extract transcript or web page, registering active source metadata.
     
     If lazy=True, extracts content and registers source without computing vector embeddings.
@@ -166,8 +166,9 @@ def ingest_url(url: str, session_id: str, lazy: bool = True):
     
     register_active_source(document, session_id)
     if not lazy:
-        ingest_document(document, session_id)
-    return document
+        chunks = ingest_document(document, session_id)
+        return chunks if chunks else [document]
+    return [document]
 
 
 def ensure_source_indexed(session_id: str) -> bool:
