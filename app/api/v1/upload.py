@@ -84,14 +84,20 @@ async def upload_file(
                     )
                 buffer.write(chunk)
 
-        chunks = ingest_file(str(file_path), session_id=effective_thread)
+        chunks = ingest_file(str(file_path), session_id=effective_thread, force_reindex=True)
+
+        if not chunks:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unable to extract readable text or index chunks from '{filename}'. Please verify the file is not empty or corrupted.",
+            )
 
         return UploadResponse(
             filename=filename,
             content_type=file.content_type,
             file_size_bytes=total_bytes,
             location=str(file_path),
-            status="uploaded" if chunks else "uploaded",
+            status="indexed",
             chunks_indexed=len(chunks),
             thread_id=effective_thread,
         )

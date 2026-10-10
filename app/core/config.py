@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # LLM & Observability
     PRIMARY_PROVIDER: str = Field(default="gemini")
     DEFAULT_LLM_PROVIDER: str = Field(default="gemini")
-    GEMINI_API_KEY: str = Field(default="")
+    GEMINI_API_KEY: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_KEY", ""))
     LANGSMITH_TRACING: bool = Field(default=False)
 
     # Rate Limiting & Timeouts

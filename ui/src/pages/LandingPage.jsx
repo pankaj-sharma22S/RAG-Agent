@@ -20,11 +20,11 @@ export default function LandingPage() {
   const { user, continueAsGuest } = useAuth();
   const navigate = useNavigate();
 
-  const handleQuickLaunch = () => {
+  const handleQuickLaunch = (targetPath = "/chat") => {
     if (!user) {
       continueAsGuest("Demo Explorer");
     }
-    navigate("/dashboard");
+    navigate(targetPath);
   };
 
   return (
@@ -41,20 +41,20 @@ export default function LandingPage() {
         <nav className="landing-nav-links">
           <a href="#features" className="nav-link-landing">Features</a>
           <a href="#architecture" className="nav-link-landing">Architecture</a>
-          <a href="#diagnostics" className="nav-link-landing">Diagnostics</a>
+          <Link to="/diagnostics" className="nav-link-landing">Diagnostics</Link>
         </nav>
 
         <div className="landing-nav-actions">
           {user ? (
-            <Link to="/dashboard" className="btn-primary btn-sm">
-              Go to Dashboard <ArrowRight size={14} />
+            <Link to="/chat" className="btn-primary btn-sm">
+              Open Chat Workspace <ArrowRight size={14} />
             </Link>
           ) : (
             <>
               <Link to="/login" className="btn-secondary btn-sm">
                 Sign In
               </Link>
-              <button onClick={handleQuickLaunch} className="btn-primary btn-sm">
+              <button onClick={() => handleQuickLaunch("/chat")} className="btn-primary btn-sm">
                 Launch Demo <Sparkles size={14} />
               </button>
             </>
@@ -79,7 +79,7 @@ export default function LandingPage() {
         </p>
 
         <div className="hero-cta-group">
-          <button onClick={handleQuickLaunch} className="btn-primary btn-lg">
+          <button onClick={() => handleQuickLaunch("/chat")} className="btn-primary btn-lg">
             Launch Interactive Workspace <ArrowRight size={18} />
           </button>
           <Link to="/login" className="btn-secondary btn-lg">
@@ -214,7 +214,7 @@ export default function LandingPage() {
       <section className="cta-banner">
         <h2>Ready to Explore Insight AI?</h2>
         <p>Launch the interactive workspace and start querying documents, analyzing repos, and chatting in real-time.</p>
-        <button onClick={handleQuickLaunch} className="btn-primary btn-lg">
+        <button onClick={() => handleQuickLaunch("/chat")} className="btn-primary btn-lg">
           Launch Workspace Now <ArrowRight size={18} />
         </button>
       </section>

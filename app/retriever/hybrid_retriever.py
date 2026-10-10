@@ -59,9 +59,12 @@ def resolve_parent_documents(child_docs: List[Document]) -> List[Document]:
         parent_content = metadata.get("parent_content")
 
         # Documents without hierarchy metadata are still valid retrieval hits;
-        # use their own content as an atomic parent and deduplicate by position.
-        if parent_id is None:
-            parent_id = f"__atomic_{index}"
+        # use unique page/chunk identity to prevent dropping chunks.
+        if not parent_id:
+            page = metadata.get("page", 1)
+            source = metadata.get("source", metadata.get("filename", "doc"))
+            parent_id = f"{source}_page{page}_chunk{index}"
+
         parent_id = str(parent_id)
         if parent_id in seen_parent_ids:
             continue
@@ -93,6 +96,15 @@ def _session_filter(session_id: str, filter_dict: dict[str, Any] | None) -> dict
     return clauses[0] if len(clauses) == 1 else {"$and": clauses}
 
 
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
+
+
 class HybridRetriever:
     """Fuse dense Chroma and session-aware BM25 retrieval with weighted RRF."""
 
@@ -100,6 +112,7 @@ class HybridRetriever:
         self.hybrid_top_k = int(os.getenv("HYBRID_TOP_K", "30"))
         self.hybrid_enabled = os.getenv("HYBRID_ENABLED", "true").lower() in {"true", "1", "yes"}
 
+    @safe_traceable(name="hybrid_retrieval", run_type="retriever", tags=["retrieval", "hybrid", "bm25", "dense"])
     def retrieve(
         self,
         query: str,
@@ -141,6 +154,41 @@ class HybridRetriever:
                 child_docs = dense_docs
 
             parent_docs = resolve_parent_documents(child_docs[:result_limit])
+
+            # Fallback if session filter restricted results to 0
+            if not parent_docs and (session_id or filter_dict):
+                logger.info("Scoped hybrid retrieval yielded 0 hits. Attempting fallback unconstrained retrieval.")
+                fallback_dense_kwargs: dict[str, Any] = {"k": 8}
+                if filter_dict:
+                    fallback_dense_kwargs["filter"] = _session_filter("", filter_dict)
+                fallback_dense_retriever = store.as_retriever(search_kwargs=fallback_dense_kwargs)
+                fallback_sparse_retriever = _SparseRetrieverAdapter(
+                    session_id="",
+                    filter_dict=filter_dict or {},
+                    top_k=8,
+                )
+                dense_docs = fallback_dense_retriever.invoke(query)
+                dense_count = len(dense_docs)
+                if self.hybrid_enabled:
+                    sparse_docs = fallback_sparse_retriever.invoke(query)
+                    sparse_count = len(sparse_docs)
+                    ensemble = EnsembleRetriever(
+                        retrievers=[fallback_dense_retriever, fallback_sparse_retriever],
+                        weights=[0.6, 0.4],
+                    )
+                    child_docs = ensemble.invoke(query)
+                else:
+                    sparse_count = 0
+                    child_docs = dense_docs
+
+                # If still 0 and filter_dict was set, try totally unconstrained
+                if not child_docs and filter_dict:
+                    global_dense_retriever = store.as_retriever(search_kwargs={"k": 8})
+                    child_docs = global_dense_retriever.invoke(query)
+                    dense_count = len(child_docs)
+
+                parent_docs = resolve_parent_documents(child_docs[:result_limit])
+
             ranked = [
                 (document, 1.0 / (rank + 1))
                 for rank, document in enumerate(parent_docs)

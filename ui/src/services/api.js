@@ -6,7 +6,44 @@
 
 import { supabase } from "../lib/supabase";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+const apiBaseUrl = configuredApiBaseUrl
+  ? new URL(configuredApiBaseUrl, window.location.origin)
+  : null;
+const loopbackHosts = ["localhost", "127.0.0.1", "::1", "[::1]"];
+
+if (
+  apiBaseUrl &&
+  loopbackHosts.includes(apiBaseUrl.hostname) &&
+  !loopbackHosts.includes(window.location.hostname)
+) {
+  apiBaseUrl.hostname = window.location.hostname;
+}
+
+export const API_BASE_URL = apiBaseUrl
+  ? apiBaseUrl.toString().replace(/\/$/, "")
+  : "/api/v1";
+export const BACKEND_SERVER_URL = API_BASE_URL.startsWith("http")
+  ? API_BASE_URL.replace(/\/api\/v1\/?$/, "")
+  : "";
+
+/**
+ * Robustly resolve image URLs (handling relative /api paths, absolute URLs, and data URIs)
+ */
+export function resolveImageUrl(url) {
+  if (!url || typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("blob:")
+  ) {
+    return trimmed;
+  }
+  const cleanUrl = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return `${BACKEND_SERVER_URL}${cleanUrl}`;
+}
 
 /**
  * Extract active JWT access token from Supabase session.
@@ -72,6 +109,12 @@ async function request(endpoint, options = {}) {
     return await response.json();
   } catch (err) {
     console.error(`API Error on [${options.method || "GET"} ${endpoint}]:`, err);
+    if (err.name === "TypeError" && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
+      const netErr = new Error("Unable to connect to the backend server. Please verify the server is running on port 8000.");
+      netErr.status = 0;
+      netErr.code = "NETWORK_ERROR";
+      throw netErr;
+    }
     throw err;
   }
 }
@@ -228,14 +271,28 @@ export const api = {
     return request("/github/status");
   },
 
-  // ==========================================
-  // Threads & Conversation History
-  // ==========================================
-  async listThreads(limit = 20, offset = 0) {
+  async listThreads(limit = 50, offset = 0) {
     return request(`/threads?limit=${limit}&offset=${offset}`);
   },
 
   async getThread(thread_id) {
     return request(`/threads/${encodeURIComponent(thread_id)}`);
+  },
+
+  async deleteThread(thread_id) {
+    return request(`/threads/${encodeURIComponent(thread_id)}`, {
+      method: "DELETE",
+    });
+  },
+
+  async renameThread(thread_id, title) {
+    return request(`/threads/${encodeURIComponent(thread_id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    });
+  },
+
+  async getThreadSuggestions(thread_id = "default") {
+    return request(`/threads/${encodeURIComponent(thread_id)}/suggestions`);
   },
 };

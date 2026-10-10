@@ -78,7 +78,20 @@ class SparseRetriever:
             doc_sets = self._doc_tokens.get(session_id, [])
 
             if not bm25 or not docs:
-                return []
+                # Fallback to search across all indexed sessions
+                if self._documents:
+                    all_docs = []
+                    all_sets = []
+                    for sid, sdocs in self._documents.items():
+                        all_docs.extend(sdocs)
+                        all_sets.extend(self._doc_tokens.get(sid, []))
+                    if all_docs:
+                        corpus_tokens = [tokenize_text(doc.page_content) for doc in all_docs]
+                        bm25 = BM25Plus(corpus_tokens)
+                        docs = all_docs
+                        doc_sets = all_sets
+                if not bm25 or not docs:
+                    return []
 
             scores = bm25.get_scores(query_tokens)
 

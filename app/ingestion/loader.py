@@ -93,6 +93,8 @@ class UniversalLoader:
             return loader_class(source, encoding="utf-8", autodetect_encoding=True)
         return loader_class(source)
 
+    IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
+
     @classmethod
     def _load_raw(cls, source: str) -> tuple[list[Document], str, str]:
         if cls._is_url(source):
@@ -100,7 +102,26 @@ class UniversalLoader:
             source_type = "youtube" if cls._is_youtube_url(source) else "web"
             return loader.load(), source_type, ""
         path = Path(source)
-        return cls._loader_for_file(source).load(), "file", path.suffix.lower()
+        ext = path.suffix.lower()
+
+        # 1. Specialized Multimodal PDF Loader
+        if ext == ".pdf":
+            try:
+                from app.ingestion.pdf_loader import load_pdf
+            except ImportError:
+                from ingestion.pdf_loader import load_pdf
+            return load_pdf(source), "file", ext
+
+        # 2. Specialized Image Loader (OCR & Vision Embedding)
+        if ext in cls.IMAGE_EXTENSIONS:
+            try:
+                from app.ingestion.image_loader import load_image
+            except ImportError:
+                from ingestion.image_loader import load_image
+            doc = load_image(source)
+            return [doc] if isinstance(doc, Document) else (doc if isinstance(doc, list) else []), "image", ext
+
+        return cls._loader_for_file(source).load(), "file", ext
 
     @staticmethod
     def _standardize_metadata(

@@ -37,7 +37,11 @@ class ModelRouter:
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
         self.openrouter_model = os.getenv("OPENROUTER_MODEL", "openrouter/meta-llama/llama-3.3-70b-instruct")
 
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.gemini_api_key = (
+            os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+            or os.getenv("GEMINI_KEY")
+        )
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 
         # Discover installed Ollama model if available
@@ -77,10 +81,12 @@ class ModelRouter:
         self,
         complexity: Literal["simple", "medium", "complex"] = "medium",
         force_provider: Literal["ollama", "gemini", "openrouter"] | None = None,
+        runtime_gemini_key: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return ordered list of provider candidates across Ollama, Gemini, and OpenRouter."""
         self.reload_config()
 
+        effective_gemini_key = runtime_gemini_key or self.gemini_api_key
         effective_ollama_model = self._discovered_ollama_model or self.ollama_model
 
         ollama_entry = {
@@ -92,7 +98,7 @@ class ModelRouter:
         gemini_entry = {
             "provider": "gemini",
             "model": self.gemini_model,
-            "api_key": self.gemini_api_key,
+            "api_key": effective_gemini_key,
         }
         openrouter_entry = {
             "provider": "openrouter",

@@ -1,6 +1,6 @@
 # Core Web Frameworks & UI
 fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
+uvicorn[standard]==0.34.0
 python-multipart>=0.0.9
 pyjwt[crypto]>=2.9.0
 beautifulsoup4>=4.12.0
@@ -20,13 +20,15 @@ langgraph==1.2.9
 langgraph-checkpoint>=2.0.0
 langsmith==0.10.9
 
-# Vector Databases & Embeddings
+# Vector Databases & Embeddings (Lightweight CPU ONNX)
 chromadb==1.5.9
-qdrant-client>=1.10.0
-sentence-transformers==5.6.0
 fastembed>=0.3.6
+
+# Neural CrossEncoder Reranking & Vision (CPU)
+sentence-transformers>=3.0.0
 transformers>=4.40.0
-torch>=2.2.0
+pillow>=10.0.0
+torch
 
 # Keyword Retrieval & Search Tools
 rank-bm25>=0.2.2

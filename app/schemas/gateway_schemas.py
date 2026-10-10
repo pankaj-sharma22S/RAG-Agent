@@ -22,6 +22,7 @@ class LLMRequest(BaseModel):
     force_provider: Literal["ollama", "gemini", "openrouter"] | None = Field(
         default=None, description="Optional manual override provider."
     )
+    api_key: str | None = Field(default=None, description="Optional dynamic/runtime API key override.")
 
 
 class UsageMetadata(BaseModel):

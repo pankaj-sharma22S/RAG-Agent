@@ -24,14 +24,20 @@ _CHILD_SPLITTER = RecursiveCharacterTextSplitter(
 
 
 def _document_id(document: Document, document_index: int) -> str:
-    """Use a stable source identity when available, with a per-call fallback."""
+    """Use a stable source identity when available, incorporating page numbers if present."""
     metadata = document.metadata or {}
-    return str(
+    base_id = str(
         metadata.get("doc_id")
         or metadata.get("source_id")
         or metadata.get("source")
         or f"doc{document_index}"
     )
+    if "page" in metadata:
+        return f"{base_id}_page{metadata['page']}"
+    if document_index > 0:
+        return f"{base_id}_d{document_index}"
+    return base_id
+
 
 
 def _atomic_chunk(document: Document, parent_id: str) -> Document:

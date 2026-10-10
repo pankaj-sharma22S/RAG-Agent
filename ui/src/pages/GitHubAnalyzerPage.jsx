@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { api } from "../services/api";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { api, resolveImageUrl } from "../services/api";
 import MarkdownRenderer from "../components/MarkdownRenderer";
 import {
   GitBranch,
@@ -22,6 +23,8 @@ import {
   Copy,
   Check,
   MessageSquare,
+  Clock,
+  RotateCcw,
 } from "lucide-react";
 
 const SAMPLE_REPOS = [
@@ -43,6 +46,10 @@ const SAMPLE_REPOS = [
 ];
 
 export default function GitHubAnalyzerPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const urlThreadId = searchParams.get("thread");
+
   const [repoUrl, setRepoUrl] = useState("");
   const [focusQuery, setFocusQuery] = useState("");
   const [branch, setBranch] = useState("");
@@ -56,12 +63,46 @@ export default function GitHubAnalyzerPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStage, setCurrentStage] = useState(null);
   const [threadId, setThreadId] = useState(
-    () => `gh_thread_${Math.random().toString(36).substring(2, 9)}`
+    () => urlThreadId || `gh_thread_${Math.random().toString(36).substring(2, 9)}`
   );
   const [copiedId, setCopiedId] = useState(null);
 
   const abortControllerRef = useRef(null);
   const messagesEndRef = useRef(null);
+
+  // Restore thread history if thread ID changes
+  useEffect(() => {
+    let isSubscribed = true;
+    const fetchHistory = async () => {
+      if (!threadId) return;
+      try {
+        const threadData = await api.getThread(threadId);
+        if (isSubscribed && threadData?.turns && threadData.turns.length > 0) {
+          const restored = [];
+          threadData.turns.forEach((turn, idx) => {
+            restored.push({
+              id: `user_${turn.turn_id || idx}`,
+              role: "user",
+              content: turn.user_query,
+            });
+            restored.push({
+              id: `ai_${turn.turn_id || idx}`,
+              role: "assistant",
+              content: turn.agent_response,
+              route: turn.route || "github_agent",
+            });
+          });
+          setMessages(restored);
+        }
+      } catch (err) {
+        console.debug("No previous thread history for this session:", err);
+      }
+    };
+    fetchHistory();
+    return () => {
+      isSubscribed = false;
+    };
+  }, [threadId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -345,7 +386,19 @@ export default function GitHubAnalyzerPage() {
                 <MessageSquare className="icon-accent" size={22} />
                 <h2>Ask Follow-Up Questions About This Codebase</h2>
               </div>
-              <span className="badge">Session: <code>{threadId}</code></span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span className="badge">Session: <code>{threadId}</code></span>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/chat?thread=${threadId}`)}
+                  className="btn-secondary btn-sm"
+                  title="Open full conversation history in primary chat workspace"
+                >
+                  <MessageSquare size={13} />
+                  <span>Full Chat</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
             </div>
 
             {/* Quick Starters */}

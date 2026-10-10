@@ -33,8 +33,10 @@ class ConversationTurn(BaseModel):
     turn_id: str = Field(default_factory=lambda: str(uuid4()))
     user_query: str
     agent_response: str
+    route: Optional[str] = None
     suggested_followups: List[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=utc_now)
+    created_at: Optional[datetime] = Field(default_factory=utc_now)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 

@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
+import MarkdownRenderer from "../components/MarkdownRenderer";
 import {
   UploadCloud,
   FileText,
@@ -8,13 +10,19 @@ import {
   AlertCircle,
   Clock,
   Layers,
+  MessageSquare,
+  ArrowRight,
 } from "lucide-react";
 
 export default function DocumentsPage() {
+  const navigate = useNavigate();
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [uploadError, setUploadError] = useState("");
+  const [docThreadId, setDocThreadId] = useState(
+    () => `doc_thread_${Math.random().toString(36).substring(2, 9)}`
+  );
 
   const [query, setQuery] = useState("");
   const [querying, setQuerying] = useState(false);
@@ -30,7 +38,7 @@ export default function DocumentsPage() {
     setUploadError("");
 
     try {
-      const res = await api.uploadFile(file);
+      const res = await api.uploadFile(file, docThreadId);
       setUploadResult(res);
       setFile(null);
     } catch (err) {
@@ -49,7 +57,7 @@ export default function DocumentsPage() {
     setQueryError("");
 
     try {
-      const res = await api.queryDocuments(query.trim());
+      const res = await api.queryDocuments(query.trim(), docThreadId);
       setQueryResult(res);
     } catch (err) {
       setQueryError(err.message || "Query failed.");
@@ -101,11 +109,23 @@ export default function DocumentsPage() {
             )}
 
             {uploadResult && (
-              <div className="auth-alert success">
-                <CheckCircle size={18} />
-                <span>
-                  Indexed "{uploadResult.filename}" ({uploadResult.chunks_indexed} chunks created).
-                </span>
+              <div className="auth-alert success" style={{ flexDirection: "column", alignItems: "flex-start", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <CheckCircle size={18} />
+                  <span>
+                    Indexed "{uploadResult.filename}" ({uploadResult.chunks_indexed} chunks created).
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/chat?thread=${docThreadId}`)}
+                  className="btn-primary btn-sm"
+                  style={{ marginTop: "0.25rem" }}
+                >
+                  <MessageSquare size={13} />
+                  <span>Open in Chat Workspace</span>
+                  <ArrowRight size={13} />
+                </button>
               </div>
             )}
 
@@ -154,7 +174,20 @@ export default function DocumentsPage() {
                 <span>Retrieved: {queryResult.retrieved_chunks} Chunks</span>
                 {queryResult.route && <span>Route: {queryResult.route}</span>}
               </div>
-              <div className="result-content">{queryResult.answer}</div>
+              <div className="result-content markdown-body" style={{ marginTop: "0.5rem" }}>
+                <MarkdownRenderer content={queryResult.answer} />
+              </div>
+              <div style={{ marginTop: "0.75rem", display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/chat?thread=${docThreadId}`)}
+                  className="btn-secondary btn-sm"
+                >
+                  <MessageSquare size={13} />
+                  <span>Continue in Full Chat</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
             </div>
           )}
         </div>

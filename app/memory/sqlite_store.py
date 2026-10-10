@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
 from .schemas import ConversationTurn, ThreadConversation, UserPreferences
+
+logger = logging.getLogger(__name__)
 
 
 class SQLiteMemoryStore:
@@ -62,6 +65,14 @@ class SQLiteMemoryStore:
                 (profile.user_id, profile.model_dump_json(), now),
             )
 
+    def thread_exists(self, thread_id: str, user_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM chat_threads WHERE thread_id = ? AND user_id = ?",
+                (thread_id, user_id),
+            ).fetchone()
+        return row is not None
+
     def get_thread(self, thread_id: str, user_id: str) -> ThreadConversation:
         with self._connect() as connection:
             row = connection.execute(
@@ -69,7 +80,11 @@ class SQLiteMemoryStore:
                 (thread_id, user_id),
             ).fetchone()
         if row:
-            return ThreadConversation.model_validate_json(row["data"])
+            try:
+                return ThreadConversation.model_validate_json(row["data"])
+            except Exception:
+                logger.warning("Corrupt thread payload for thread_id=%s user_id=%s; returning empty fallback thread.", thread_id, user_id)
+                return ThreadConversation(thread_id=thread_id, user_id=user_id)
         return ThreadConversation(thread_id=thread_id, user_id=user_id)
 
     def save_thread(self, thread: ThreadConversation) -> None:
@@ -112,15 +127,38 @@ class SQLiteMemoryStore:
             ).fetchall()
         summaries: List[Dict[str, Any]] = []
         for row in rows:
-            thread = ThreadConversation.model_validate_json(row["data"])
+            try:
+                thread = ThreadConversation.model_validate_json(row["data"])
+            except Exception:
+                logger.warning("Skipping corrupt thread row for thread_id=%s user_id=%s while listing threads.", row["thread_id"], user_id)
+                continue
             summaries.append(
                 {
                     "thread_id": thread.thread_id,
                     "user_id": thread.user_id,
                     "title": thread.title,
-                    "turn_count": len(thread.turns),
                     "created_at": thread.created_at.isoformat(),
                     "updated_at": thread.updated_at.isoformat(),
+                    "turn_count": len(thread.turns),
                 }
             )
         return summaries
+
+    def delete_thread(self, thread_id: str, user_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM chat_threads WHERE thread_id = ? AND (user_id = ? OR user_id = 'default')",
+                (thread_id, user_id),
+            )
+            return cursor.rowcount > 0
+
+    def rename_thread(self, thread_id: str, user_id: str, new_title: str) -> bool:
+        thread = self.get_thread(thread_id, user_id)
+        if not thread.turns and thread.title == "New Conversation":
+            # Check default
+            thread = self.get_thread(thread_id, "default")
+        thread.title = new_title.strip()[:100]
+        thread.updated_at = datetime.now(timezone.utc)
+        self.save_thread(thread)
+        return True
+

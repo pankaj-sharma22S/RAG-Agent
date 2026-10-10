@@ -1,144 +1,140 @@
-# =========================
-
-# Environment / Secrets
-
-# =========================
-
+# =============================================================================
+# Environments & Secrets
+# =============================================================================
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.cert
 
-# =========================
-
-# Python
-
-# =========================
-
-**pycache**/
+# =============================================================================
+# Python & Bytecode
+# =============================================================================
+**/__pycache__/
+__pycache__/
 *.py[cod]
+*$py.class
 *.pyo
+*.pyd
+
+# Testing, Linting & Coverage
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.tox/
 
-# Virtual environments
-
+# Virtual Environments
 venv/
 .venv/
 env/
+ENV/
+env.bak/
+venv.bak/
 
-# =========================
-
-# FastAPI / Application Data
-
-# =========================
-
+# =============================================================================
+# Application Databases & Vector Storage
+# =============================================================================
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
+*.sqlite-journal
+*.sqlite3-journal
 
-app/data/
-data/
+# Database & Runtime directories
+app/data/*.db
+app/data/*.sqlite*
+data/*.db
+data/*.sqlite*
 
-# =========================
-
-# RAG / Vector Database
-
-# =========================
-
+# Local Vector DB & Chroma
 chroma/
 chroma_db/
+chroma_storage/
 local_vector_db/
+qdrant_storage/
 
-# =========================
+# Extracted Images & Ingestion Artifacts
+app/data/extracted_images/
+data/extracted_images/
+uploads/
+app/data/uploads/
+outputs/
 
-# Frontend
+# ONNX / Model Caching
+.fastembed_cache/
+fastembed_cache/
+.onnx_cache/
 
-# =========================
-
+# =============================================================================
+# Frontend / UI (React + Vite)
+# =============================================================================
 node_modules/
+ui/node_modules/
 dist/
+ui/dist/
 build/
+ui/build/
 .vite/
+ui/.vite/
 
-# npm logs
-
+# NPM / Yarn / PNPM logs
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
 pnpm-debug.log*
+.pnpm-debug.log*
 
-# =========================
-
-# Docker
-
-# =========================
-
+# =============================================================================
+# Docker & Deployment
+# =============================================================================
 docker-compose.override.yml
 
-# =========================
-
-# IDE / Editors
-
-# =========================
-
+# =============================================================================
+# IDEs, Editors & OS Files
+# =============================================================================
 .vscode/
 .idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
 
-# =========================
-
-# OS files
-
-# =========================
-
+# OS Metadata
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# =========================
-
-# Logs
-
-# =========================
-
+# =============================================================================
+# Logs & Temporary Files
+# =============================================================================
 *.log
 logs/
-
-# =========================
-
-# Temporary files
-
-# =========================
-
 *.tmp
 *.temp
 *.swp
+*.swo
 *.bak
 *.cache
 .cache/
-
-# =========================
-
-# Testing
-
-# =========================
-
-.pytest_cache/
-.coverage
-htmlcov/
-
-# =========================
-
-# Generated files
-
-# =========================
-
-uploads/
-outputs/
 tmp/
 temp/
-EOF
+
+# Archives
 *.zip
 *.tar
 *.tar.gz
+*.rar
+*.7z

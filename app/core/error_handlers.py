@@ -118,6 +118,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Duck-typing fallback for any AppException instances across module path aliases
+    if hasattr(exc, "status_code") and hasattr(exc, "error_code") and hasattr(exc, "message"):
+        return await app_exception_handler(request, exc)  # type: ignore
+
     request_id = getattr(request.state, "request_id", None)
     # Log full traceback server-side only
     logger.exception(

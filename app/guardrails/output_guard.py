@@ -22,11 +22,20 @@ DEFAULT_IMAGE_DOMAINS = {"storage.googleapis.com", "s3.amazonaws.com"}
 
 
 def sanitize_image_url(image_url: str | None) -> str | None:
-    """Allow only HTTPS image URLs hosted on configured enterprise domains."""
+    """Allow safe internal API image endpoints or HTTPS image URLs on configured enterprise domains."""
     if not image_url or not isinstance(image_url, str):
         return None
 
-    parsed = urlparse(image_url.strip())
+    clean_url = image_url.strip()
+
+    # 1. Allow safe internal API paths
+    if clean_url.startswith(("/api/v1/images/", "/api/images/")):
+        if ".." in clean_url or "\\" in clean_url:
+            return BLOCKED_IMAGE_URL
+        return clean_url
+
+    # 2. Validate external HTTPS image URLs
+    parsed = urlparse(clean_url)
     hostname = (parsed.hostname or "").lower().rstrip(".")
     configured = os.getenv("IMAGE_ALLOWED_DOMAINS", "")
     allowed_domains = {
@@ -47,13 +56,24 @@ def sanitize_image_url(image_url: str | None) -> str | None:
     allowed_host = any(hostname == domain or hostname.endswith(f".{domain}") for domain in allowed_domains)
     if parsed.scheme != "https" or not hostname or is_ip or not allowed_host:
         return BLOCKED_IMAGE_URL
-    return image_url.strip()
+    return clean_url
+
+
+
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
 
 
 class OutputGuard:
     """Validates model responses before returning to users or downstream workflows."""
 
     @staticmethod
+    @safe_traceable(name="output_guardrails", run_type="chain", tags=["guardrails", "security", "pii", "output_validation"])
     def validate_output(
         content: str,
         expected_schema: type[BaseModel] | None = None,

@@ -174,6 +174,7 @@ def load_youtube(url: str) -> Document:
         sanitized_snippets, source_name=f"YouTube Video ({video_id})", content_type="youtube_transcript"
     )
 
+    thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
     meta: dict[str, Any] = {
         "source": url,
         "source_url": url,
@@ -182,6 +183,8 @@ def load_youtube(url: str) -> Document:
         "type": "youtube",
         "video_id": video_id,
         "title": f"YouTube Video {video_id}",
+        "image_url": thumbnail_url,
+        "has_images": True,
     }
     if timestamp_sec is not None:
         meta["timestamp"] = timestamp_sec

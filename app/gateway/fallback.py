@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
-from pydantic import BaseModel
+
 
 try:
     from app.schemas.gateway_schemas import FallbackDecision

@@ -26,19 +26,44 @@ from rag_workflow import direct_query_router, stream_response
 from schemas.api_schemas import ChatRequest, ChatResponse
 from services.redis_service import redis_service
 
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
+
 logger = logging.getLogger("ChatAPI")
 router = APIRouter(prefix="/chat", tags=["Agentic Chat & Streaming"])
+
+
+def resolve_request_api_key(request: ChatRequest, raw_req: Request | None = None) -> str | None:
+    """Extract dynamic Gemini/LLM API key from request body or HTTP headers."""
+    if request.gemini_api_key and request.gemini_api_key.strip():
+        return request.gemini_api_key.strip()
+    if request.api_key and request.api_key.strip():
+        return request.api_key.strip()
+    if raw_req:
+        headers = raw_req.headers
+        for header_name in ["x-gemini-api-key", "x-api-key", "x-google-api-key", "gemini-api-key"]:
+            if val := headers.get(header_name):
+                if val.strip():
+                    return val.strip()
+    return None
 
 
 @router.post("", response_model=ChatResponse, summary="Send message to AI Agent (Standard response)")
 async def chat_endpoint(
     request: ChatRequest,
+    raw_req: Request,
     current_user: AuthenticatedUser = Depends(get_optional_user),
 ) -> ChatResponse:
     """Execute end-to-end agentic workflow with persistent memory, semantic cache, and rate limiting."""
     user_id = current_user.user_id
     thread_id = request.thread_id or f"thread_{user_id[:8]}_{int(time.time())}"
     t_start = time.perf_counter()
+    runtime_key = resolve_request_api_key(request, raw_req)
 
     # 1. Redis Rate-Limit Check
     allowed, remaining, retry_after = redis_service.check_rate_limit(
@@ -52,51 +77,89 @@ async def chat_endpoint(
         )
 
     # 2. Redis Semantic-Cache Check
-    cache_context = {"user_id": user_id, "endpoint": "chat"}
+    cache_context = {"user_id": user_id, "thread_id": thread_id, "endpoint": "chat"}
     cached_entry = redis_service.get_semantic_cache(
         query=request.message,
         context=cache_context,
     )
     if cached_entry:
         cached_answer = cached_entry.get("answer", "") if isinstance(cached_entry, dict) else str(cached_entry)
+        cached_sources = cached_entry.get("sources", []) if isinstance(cached_entry, dict) else []
         followups = cached_entry.get("suggested_followups", []) if isinstance(cached_entry, dict) else []
         elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
         return ChatResponse(
             answer=cached_answer,
             thread_id=thread_id,
             route="semantic_cache",
-            retrieved_chunks=0,
-            sources=[],
+            retrieved_chunks=len(cached_sources),
+            sources=cached_sources,
             suggested_followups=followups,
             latency_ms=elapsed_ms,
         )
 
-    # 3. Cache MISS -> Execute Existing Pipeline
+    # 3. Cache MISS -> Execute End-to-End RAG Pipeline
     try:
-        result = await global_memory_service.chat(
-            query=request.message,
-            config={"configurable": {"thread_id": thread_id, "user_id": user_id}},
+        if runtime_key:
+            from app.gateway import gateway_chat_model
+            gateway_chat_model.api_key = runtime_key
+
+        route, _ = direct_query_router(request.message, session_id=thread_id)
+        sources_list: list[dict[str, Any]] = []
+        route_list: list[str] = []
+        # Hydrate thread conversation history
+        history_messages = global_memory_service.hydrate_working_memory(
+            user_id=user_id,
+            thread_id=thread_id,
+            max_turns=6,
         )
+        full_messages = [*history_messages, HumanMessage(content=request.message)]
+        collected_tokens: list[str] = []
+        token_iter = stream_response(
+            question=request.message,
+            messages=full_messages,
+            session_id=thread_id,
+            sources_collector=sources_list,
+            route_collector=route_list,
+        )
+        for token in token_iter:
+            collected_tokens.append(token)
+
+        full_answer = "".join(collected_tokens)
+        final_route = route_list[-1] if route_list else route
         elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
 
-        # 4. Store Final Response in Redis Semantic Cache
-        if result.answer and not result.answer.strip().startswith("I encountered an issue") and not result.answer.strip().startswith("⚠️"):
+        # 4. Persist to SQLite Memory Store
+        if full_answer and not full_answer.strip().startswith("⚠️"):
+            try:
+                from memory.schemas import ConversationTurn
+                turn = ConversationTurn(
+                    turn_id=str(uuid.uuid4()),
+                    user_query=request.message,
+                    agent_response=full_answer,
+                    route=final_route,
+                )
+                global_memory_service.store.add_turn_to_thread(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    turn=turn,
+                )
+            except Exception as save_err:
+                logger.warning("Could not persist turn to SQLite: %s", save_err)
+
+            # Store in Redis Semantic Cache
             redis_service.set_semantic_cache(
                 query=request.message,
-                response_data={
-                    "answer": result.answer,
-                    "suggested_followups": result.suggested_followups or [],
-                },
+                response_data={"answer": full_answer, "sources": sources_list},
                 context=cache_context,
             )
 
         return ChatResponse(
-            answer=result.answer,
+            answer=full_answer,
             thread_id=thread_id,
-            route="memory_chat",
-            retrieved_chunks=0,
-            sources=[],
-            suggested_followups=result.suggested_followups or [],
+            route=final_route,
+            retrieved_chunks=len(sources_list),
+            sources=sources_list,
+            suggested_followups=[],
             latency_ms=elapsed_ms,
         )
     except Exception as err:
@@ -114,6 +177,11 @@ async def chat_stream_endpoint(
     user_id = current_user.user_id
     thread_id = request.thread_id or f"thread_{user_id[:8]}_{int(time.time())}"
 
+    runtime_key = resolve_request_api_key(request, http_request)
+    if runtime_key:
+        from app.gateway import gateway_chat_model
+        gateway_chat_model.api_key = runtime_key
+
     # 1. Redis Rate-Limit Check
     allowed, remaining, retry_after = redis_service.check_rate_limit(
         identifier=user_id,
@@ -126,7 +194,7 @@ async def chat_stream_endpoint(
         )
 
     # 2. Redis Semantic-Cache Check
-    cache_context = {"user_id": user_id, "endpoint": "chat_stream"}
+    cache_context = {"user_id": user_id, "thread_id": thread_id, "endpoint": "chat_stream"}
     cached_entry = redis_service.get_semantic_cache(
         query=request.message,
         context=cache_context,
@@ -148,9 +216,17 @@ async def chat_stream_endpoint(
         # CACHE MISS -> Stream from existing pipeline
         collected_tokens: list[str] = []
         try:
+            # Hydrate thread conversation history
+            history_messages = global_memory_service.hydrate_working_memory(
+                user_id=user_id,
+                thread_id=thread_id,
+                max_turns=6,
+            )
+            full_messages = [*history_messages, HumanMessage(content=request.message)]
+
             token_iter = stream_response(
                 question=request.message,
-                messages=[HumanMessage(content=request.message)],
+                messages=full_messages,
                 session_id=thread_id,
             )
             for token in token_iter:
@@ -186,6 +262,11 @@ async def chat_sse_endpoint(
     user_id = current_user.user_id
     thread_id = request.thread_id or f"thread_{user_id[:8]}_{int(time.time())}"
 
+    runtime_key = resolve_request_api_key(request, http_request)
+    if runtime_key:
+        from app.gateway import gateway_chat_model
+        gateway_chat_model.api_key = runtime_key
+
     # 1. Redis Rate-Limit Check
     allowed, remaining, retry_after = redis_service.check_rate_limit(
         identifier=user_id,
@@ -198,7 +279,7 @@ async def chat_sse_endpoint(
         )
 
     # 2. Redis Semantic-Cache Check
-    cache_context = {"user_id": user_id, "endpoint": "chat_sse"}
+    cache_context = {"user_id": user_id, "thread_id": thread_id, "endpoint": "chat_sse"}
     cached_entry = redis_service.get_semantic_cache(
         query=request.message,
         context=cache_context,
@@ -247,11 +328,13 @@ async def chat_sse_endpoint(
                 logger.warning("Could not persist cached turn to SQLite: %s", save_err)
 
             elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
+            cached_sources = cached_entry.get("sources", []) if isinstance(cached_entry, dict) else []
             done_payload = {
                 "answer": cached_answer,
                 "thread_id": thread_id,
                 "route": "semantic_cache",
                 "latency_ms": elapsed_ms,
+                "sources": cached_sources,
             }
             yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
             return
@@ -272,10 +355,21 @@ async def chat_sse_endpoint(
             await asyncio.sleep(0.001)
 
             # 2. Stream Generated Content Tokens
+            sources_list: list[dict[str, Any]] = []
+            route_list: list[str] = []
+            history_messages = global_memory_service.hydrate_working_memory(
+                user_id=user_id,
+                thread_id=thread_id,
+                max_turns=6,
+            )
+            full_messages = [*history_messages, HumanMessage(content=request.message)]
+
             token_iter = stream_response(
                 question=request.message,
-                messages=[HumanMessage(content=request.message)],
+                messages=full_messages,
                 session_id=thread_id,
+                sources_collector=sources_list,
+                route_collector=route_list,
             )
 
             for token in token_iter:
@@ -289,6 +383,7 @@ async def chat_sse_endpoint(
                 await asyncio.sleep(0.001)
 
             full_answer = "".join(collected_tokens)
+            final_route = route_list[-1] if route_list else route
             elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
 
             # 3. Persist turn to SQLite thread history
@@ -299,7 +394,7 @@ async def chat_sse_endpoint(
                         turn_id=str(uuid.uuid4()),
                         user_query=request.message,
                         agent_response=full_answer,
-                        route=route,
+                        route=final_route,
                     )
                     global_memory_service.store.add_turn_to_thread(
                         thread_id=thread_id,
@@ -312,15 +407,16 @@ async def chat_sse_endpoint(
                 # 4. Store Response in Redis Semantic Cache
                 redis_service.set_semantic_cache(
                     query=request.message,
-                    response_data={"answer": full_answer},
+                    response_data={"answer": full_answer, "sources": sources_list},
                     context=cache_context,
                 )
 
             done_payload = {
                 "answer": full_answer,
                 "thread_id": thread_id,
-                "route": route,
+                "route": final_route,
                 "latency_ms": elapsed_ms,
+                "sources": sources_list,
             }
             yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
 

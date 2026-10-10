@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -27,7 +28,149 @@ try:
 except ModuleNotFoundError:
     from core.config import settings
 
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
+
 logger = logging.getLogger("RedisService")
+
+
+class LocalSemanticEntry:
+    """In-memory entry for semantic cache fallback."""
+
+    def __init__(
+        self,
+        query: str,
+        embedding: List[float],
+        response: Any,
+        context_ns: str,
+        expires_at: float,
+    ) -> None:
+        self.query = query
+        self.embedding = embedding
+        self.response = response
+        self.context_ns = context_ns
+        self.expires_at = expires_at
+        self.created_at = time.time()
+
+
+class LocalSemanticCache:
+    """Thread-safe in-memory vector semantic cache with cosine similarity & TTL when Redis is unavailable."""
+
+    def __init__(self, max_entries_per_ns: int = 500) -> None:
+        self._store: Dict[str, List[LocalSemanticEntry]] = {}
+        self._lock = threading.Lock()
+        self._max_entries = max_entries_per_ns
+        self._hits = 0
+        self._misses = 0
+
+    def get(
+        self,
+        query_vec: List[float],
+        query_str: str,
+        ns: str,
+        sim_threshold: float,
+    ) -> Optional[Dict[str, Any]]:
+        now = time.time()
+        with self._lock:
+            entries = self._store.get(ns, [])
+            if not entries:
+                self._misses += 1
+                return None
+
+            valid_entries: List[LocalSemanticEntry] = []
+            best_match: Optional[LocalSemanticEntry] = None
+            best_sim: float = -1.0
+
+            q_vec = np.array(query_vec, dtype=np.float32)
+            q_norm = np.linalg.norm(q_vec)
+            if q_norm == 0:
+                self._misses += 1
+                return None
+
+            for entry in entries:
+                if entry.expires_at > now:
+                    valid_entries.append(entry)
+                    c_vec = np.array(entry.embedding, dtype=np.float32)
+                    c_norm = np.linalg.norm(c_vec)
+                    if c_norm > 0:
+                        sim = float(np.dot(q_vec, c_vec) / (q_norm * c_norm))
+                        if sim > best_sim:
+                            best_sim = sim
+                            best_match = entry
+
+            self._store[ns] = valid_entries
+
+            if best_match and best_sim >= sim_threshold:
+                self._hits += 1
+                logger.info(
+                    "Local Semantic Cache HIT [ns=%s, sim=%.4f >= %.2f] query: '%s' -> cached: '%s'",
+                    ns,
+                    best_sim,
+                    sim_threshold,
+                    query_str[:50],
+                    best_match.query[:50],
+                )
+                resp = best_match.response
+                if isinstance(resp, dict):
+                    return resp
+                return {"answer": str(resp)}
+
+            self._misses += 1
+            return None
+
+    def set(
+        self,
+        query: str,
+        query_vec: List[float],
+        response: Any,
+        ns: str,
+        ttl_seconds: int,
+    ) -> bool:
+        now = time.time()
+        expires_at = now + ttl_seconds
+        entry = LocalSemanticEntry(
+            query=query,
+            embedding=query_vec,
+            response=response,
+            context_ns=ns,
+            expires_at=expires_at,
+        )
+        with self._lock:
+            if ns not in self._store:
+                self._store[ns] = []
+
+            # Remove identical query
+            self._store[ns] = [
+                e for e in self._store[ns]
+                if e.query.lower() != query.lower() and e.expires_at > now
+            ]
+            self._store[ns].append(entry)
+
+            if len(self._store[ns]) > self._max_entries:
+                self._store[ns] = self._store[ns][-self._max_entries:]
+            return True
+
+    def clear(self, ns: Optional[str] = None) -> bool:
+        with self._lock:
+            if ns:
+                self._store.pop(ns, None)
+            else:
+                self._store.clear()
+            return True
+
+    def stats(self) -> Dict[str, Any]:
+        with self._lock:
+            total_entries = sum(len(entries) for entries in self._store.values())
+            return {
+                "total_entries": total_entries,
+                "hits": self._hits,
+                "misses": self._misses,
+            }
 
 
 class RedisService:
@@ -40,6 +183,7 @@ class RedisService:
         self._misses: int = 0
         self._rate_limited_count: int = 0
         self._last_warn_time: float = 0.0
+        self._local_cache = LocalSemanticCache()
 
     def _warn_throttled(self, op: str, err: Exception) -> None:
         """Log Redis warning at most once every 30 seconds to prevent log flooding when Redis is down."""
@@ -176,7 +320,7 @@ class RedisService:
             # Filter out non-partitioning dynamic keys like timestamps or ephemeral request IDs
             filtered_context = {
                 k: v for k, v in context.items()
-                if k in {"user_id", "tenant_id", "schema_version", "route", "collection", "endpoint", "database"}
+                if k in {"thread_id", "session_id", "user_id", "tenant_id", "schema_version", "route", "collection", "endpoint", "database"}
                 and v is not None
             }
             if not filtered_context:
@@ -215,6 +359,7 @@ class RedisService:
             return 0.0
         return float(np.dot(a, b) / (norm_a * norm_b))
 
+    @safe_traceable(name="semantic_cache_lookup", run_type="retriever", tags=["cache", "semantic", "redis"])
     def get_semantic_cache(
         self,
         query: str,
@@ -240,16 +385,30 @@ class RedisService:
         sim_threshold = (
             threshold
             if threshold is not None
-            else getattr(settings, "SEMANTIC_CACHE_SIMILARITY_THRESHOLD", 0.92)
+            else getattr(settings, "SEMANTIC_CACHE_SIMILARITY_THRESHOLD", 0.90)
         )
 
         ns = self._build_context_namespace(context)
+        client = self.get_client()
+
+        # Seamless Fallback to Local In-Memory / Vector Semantic Cache if Redis is not available
+        if client is None:
+            query_vec = self._get_query_embedding(clean_query)
+            if query_vec is None:
+                self._misses += 1
+                return None
+            return self._local_cache.get(query_vec, clean_query, ns, sim_threshold)
+
         index_key = f"semcache:idx:{ns}"
 
         try:
             # 1. Fetch candidate entry IDs in this context partition
             entry_ids = client.smembers(index_key)
             if not entry_ids:
+                # Also check local fallback
+                query_vec = self._get_query_embedding(clean_query)
+                if query_vec is not None:
+                    return self._local_cache.get(query_vec, clean_query, ns, sim_threshold)
                 self._misses += 1
                 return None
 
@@ -299,7 +458,7 @@ class RedisService:
             if best_match and best_similarity >= sim_threshold:
                 self._hits += 1
                 logger.info(
-                    "Semantic Cache HIT [ns=%s, sim=%.4f >= %.2f] query: '%s' -> cached: '%s'",
+                    "Redis Semantic Cache HIT [ns=%s, sim=%.4f >= %.2f] query: '%s' -> cached: '%s'",
                     ns,
                     best_similarity,
                     sim_threshold,
@@ -311,14 +470,23 @@ class RedisService:
                     return response_data
                 return {"answer": str(response_data)}
 
+            # Check local fallback if Redis missed
+            local_hit = self._local_cache.get(query_vec, clean_query, ns, sim_threshold)
+            if local_hit is not None:
+                return local_hit
+
             self._misses += 1
             return None
 
         except (redis.RedisError, ConnectionError, TimeoutError, OSError, Exception) as exc:
             self._warn_throttled("get_semantic_cache", exc)
+            query_vec = self._get_query_embedding(clean_query)
+            if query_vec is not None:
+                return self._local_cache.get(query_vec, clean_query, ns, sim_threshold)
             self._misses += 1
             return None
 
+    @safe_traceable(name="semantic_cache_store", run_type="chain", tags=["cache", "semantic", "redis"])
     def set_semantic_cache(
         self,
         query: str,
@@ -326,7 +494,7 @@ class RedisService:
         context: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None,
     ) -> bool:
-        """Store query embedding and response in Redis semantic cache with TTL."""
+        """Store query embedding and response in Redis semantic cache with TTL, with local fallback."""
         if not getattr(settings, "SEMANTIC_CACHE_ENABLED", True):
             return False
 
@@ -344,19 +512,23 @@ class RedisService:
             if ans.startswith("I encountered an issue") or ans.startswith("⚠️"):
                 return False
 
-        client = self.get_client()
-        if client is None:
-            return False
-
         query_vec = self._get_query_embedding(clean_query)
         if query_vec is None:
             return False
 
         ns = self._build_context_namespace(context)
+        ttl = ttl_seconds if ttl_seconds is not None else getattr(settings, "SEMANTIC_CACHE_TTL_SECONDS", 3600)
+
+        # Always update local fallback cache for instant resilience
+        self._local_cache.set(clean_query, query_vec, response_data, ns, ttl)
+
+        client = self.get_client()
+        if client is None:
+            return True
+
         entry_id = hashlib.sha256(clean_query.lower().encode("utf-8")).hexdigest()[:16]
         entry_key = f"semcache:entry:{ns}:{entry_id}"
         index_key = f"semcache:idx:{ns}"
-        ttl = ttl_seconds if ttl_seconds is not None else getattr(settings, "SEMANTIC_CACHE_TTL_SECONDS", 3600)
 
         payload = {
             "query": clean_query,
@@ -375,17 +547,19 @@ class RedisService:
             return True
         except (redis.RedisError, ConnectionError, TimeoutError, OSError, Exception) as exc:
             self._warn_throttled("set_semantic_cache", exc)
-            return False
+            return True
 
     def clear_cache(self, context: Optional[Dict[str, Any]] = None) -> bool:
         """Purge semantic cache entries for a given context partition or globally."""
+        ns = self._build_context_namespace(context) if context else None
+        self._local_cache.clear(ns)
+
         client = self.get_client()
         if client is None:
-            return False
+            return True
 
         try:
             if context:
-                ns = self._build_context_namespace(context)
                 index_key = f"semcache:idx:{ns}"
                 entry_ids = client.smembers(index_key)
                 if entry_ids:
@@ -404,27 +578,36 @@ class RedisService:
             return True
         except Exception as err:
             self._warn_throttled("clear_cache", err)
-            return False
+            return True
 
     def stats(self) -> Dict[str, Any]:
         """Return operational health, rate-limit, and semantic cache statistics."""
         available = self.is_available()
-        total_requests = self._hits + self._misses
-        hit_rate = (self._hits / total_requests * 100.0) if total_requests > 0 else 0.0
+        local_stats = self._local_cache.stats()
+        total_hits = self._hits + local_stats["hits"]
+        total_misses = self._misses + local_stats["misses"]
+        total_requests = total_hits + total_misses
+        hit_rate = (total_hits / total_requests * 100.0) if total_requests > 0 else 0.0
 
         return {
             "redis_connected": available,
+            "fallback_in_use": not available,
             "rate_limiting_enabled": getattr(settings, "RATE_LIMIT_ENABLED", True),
             "rate_limited_count": self._rate_limited_count,
             "semantic_cache": {
                 "enabled": getattr(settings, "SEMANTIC_CACHE_ENABLED", True),
-                "similarity_threshold": getattr(settings, "SEMANTIC_CACHE_SIMILARITY_THRESHOLD", 0.92),
+                "similarity_threshold": getattr(settings, "SEMANTIC_CACHE_SIMILARITY_THRESHOLD", 0.90),
                 "ttl_seconds": getattr(settings, "SEMANTIC_CACHE_TTL_SECONDS", 3600),
-                "hits": self._hits,
-                "misses": self._misses,
+                "hits": total_hits,
+                "misses": total_misses,
                 "hit_rate_pct": round(hit_rate, 2),
+                "local_cache_entries": local_stats["total_entries"],
             },
         }
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Alias for stats()."""
+        return self.stats()
 
 
 # Global Centralized Redis Service Singleton

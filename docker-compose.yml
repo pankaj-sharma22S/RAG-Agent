@@ -11,13 +11,19 @@ services:
   backend1:
     build: ./app
     expose:
-      - "8001:8000"
+      - "8000"
 
     environment:
       - REDIS_URL=redis://redis:6379/0
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DATABASE_URL=sqlite:///./data/dev.db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini/gemini-2.5-flash}
+      - PRIMARY_PROVIDER=${PRIMARY_PROVIDER:-gemini}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-gemini}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-ollama/llama3.2:latest}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 
     depends_on:
       - redis
@@ -29,13 +35,19 @@ services:
   backend2:
     build: ./app
     expose:
-      - "8002:8000"
+      - "8000"
 
     environment:
       - REDIS_URL=redis://redis:6379/0
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DATABASE_URL=sqlite:///./data/dev.db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini/gemini-2.5-flash}
+      - PRIMARY_PROVIDER=${PRIMARY_PROVIDER:-gemini}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-gemini}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-ollama/llama3.2:latest}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 
     depends_on:
       - redis
@@ -47,13 +59,19 @@ services:
   backend3:
     build: ./app
     expose:
-      - "8003:8000"
+      - "8000"
 
     environment:
       - REDIS_URL=redis://redis:6379/0
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DATABASE_URL=sqlite:///./data/dev.db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini/gemini-2.5-flash}
+      - PRIMARY_PROVIDER=${PRIMARY_PROVIDER:-gemini}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-gemini}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-ollama/llama3.2:latest}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 
     depends_on:
       - redis
@@ -79,4 +97,3 @@ services:
       - "6379:6379"
 
     restart: always
-

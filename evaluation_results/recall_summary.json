@@ -1,0 +1,1178 @@
+{
+  "timestamp": "2026-10-10T09:03:43.542703+00:00",
+  "experiment_name": "recall-eval-1791623023",
+  "dataset_name": "rag",
+  "source_pdf": "lec19.transformer.pdf",
+  "total_questions": 21,
+  "valid_labeled_questions": 21,
+  "unlabeled_or_review_needed": 0,
+  "total_ground_truth_chunks": 80,
+  "macro_recall_percentages": {
+    "overall_macro_recall_at_3": 9.52,
+    "overall_macro_recall_at_5": 9.52,
+    "overall_macro_recall_at_10": 9.52
+  },
+  "micro_recall_percentages": {
+    "overall_micro_recall_at_3": 8.75,
+    "overall_micro_recall_at_5": 8.75,
+    "overall_micro_recall_at_10": 8.75
+  },
+  "per_question_results": [
+    {
+      "question_id": "045fbe89-7dba-4aec-bf8c-3affb7d07f6f",
+      "question_index": 1,
+      "question": "What problem does the Transformer architecture address?",
+      "reference_answer": "The Transformer is a sequence transduction architecture that relies on attention mechanisms rather than recurrent or convolutional sequence processing.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p6_c0",
+        "lec19_transformer_p3_c0",
+        "lec19_transformer_p2_c0",
+        "lec19_transformer_p4_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p52_c0",
+        "355a0c64_transformer_p14_c0",
+        "d7798407_transformer_p14_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p3_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p2_c0",
+          "lec19_transformer_p4_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p3_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p2_c0",
+          "lec19_transformer_p4_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p3_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p2_c0",
+          "lec19_transformer_p4_c0"
+        ]
+      },
+      "rationale": "Pages 2-4 and 6 introduce the motivation for the Transformer, discussing limitations of recurrent/convolutional networks, universal multimodal representation, parallel processing, and replacing recurrence with self-attention.",
+      "relevant_pages": [
+        2,
+        3,
+        4,
+        6
+      ]
+    },
+    {
+      "question_id": "1ae1cf1b-90fb-4e3d-8881-9df27ead5788",
+      "question_index": 2,
+      "question": "What is the role of multi-head attention?",
+      "reference_answer": "Multi-head attention lets the model attend to information through multiple learned attention projections in parallel, then combines their outputs.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p38_c0",
+        "lec19_transformer_p37_c0",
+        "lec19_transformer_p35_c0",
+        "lec19_transformer_p36_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p22_c0",
+        "lec19_transformer_p51_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p38_c0",
+          "lec19_transformer_p37_c0",
+          "lec19_transformer_p35_c0",
+          "lec19_transformer_p36_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p38_c0",
+          "lec19_transformer_p37_c0",
+          "lec19_transformer_p35_c0",
+          "lec19_transformer_p36_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p38_c0",
+          "lec19_transformer_p37_c0",
+          "lec19_transformer_p35_c0",
+          "lec19_transformer_p36_c0"
+        ]
+      },
+      "rationale": "Pages 35-38 define multi-head attention, explaining how queries, keys, and values are projected into multiple subspaces with distinct heads in parallel and concatenated to capture diverse representation subspaces.",
+      "relevant_pages": [
+        35,
+        36,
+        37,
+        38
+      ]
+    },
+    {
+      "question_id": "2ac0e45d-0ff0-4512-9f2c-4b89f7aa18fb",
+      "question_index": 3,
+      "question": "Why are residual connections used in Transformer layers?",
+      "reference_answer": "Residual connections add a sublayer's input to its output, helping information and gradients flow through deeper networks.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p32_c0",
+        "lec19_transformer_p33_c0",
+        "lec19_transformer_p34_c0"
+      ],
+      "relevant_chunk_count": 3,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p32_c0",
+        "lec19_transformer_p52_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 33.33,
+        "recall_at_5": 33.33,
+        "recall_at_10": 33.33
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [
+          "lec19_transformer_p32_c0"
+        ],
+        "matched_at_5": [
+          "lec19_transformer_p32_c0"
+        ],
+        "matched_at_10": [
+          "lec19_transformer_p32_c0"
+        ]
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p33_c0",
+          "lec19_transformer_p34_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p33_c0",
+          "lec19_transformer_p34_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p33_c0",
+          "lec19_transformer_p34_c0"
+        ]
+      },
+      "rationale": "Pages 32-34 explain Add & Norm with residual connections (x + SubLayer(x)), which facilitate gradient flow and prevent vanishing gradients in deep encoder and decoder stacks.",
+      "relevant_pages": [
+        32,
+        33,
+        34
+      ]
+    },
+    {
+      "question_id": "3535f095-e6f9-49e2-aca9-96ef71af2ad6",
+      "question_index": 4,
+      "question": "What is an attention head?",
+      "reference_answer": "An attention head is one learned attention projection that computes attention using its own query, key, and value transformations.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p35_c0",
+        "lec19_transformer_p36_c0"
+      ],
+      "relevant_chunk_count": 2,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p22_c0",
+        "lec19_transformer_p51_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p35_c0",
+          "lec19_transformer_p36_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p35_c0",
+          "lec19_transformer_p36_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p35_c0",
+          "lec19_transformer_p36_c0"
+        ]
+      },
+      "rationale": "Pages 35-36 explicitly define an attention head as an individual learned linear projection of queries, keys, and values that computes scaled dot-product attention independently.",
+      "relevant_pages": [
+        35,
+        36
+      ]
+    },
+    {
+      "question_id": "4dacba67-43b5-41b0-9844-779ed8b95bed",
+      "question_index": 5,
+      "question": "What is the difference between an encoder and a decoder in the original Transformer?",
+      "reference_answer": "The encoder builds contextual representations of the input sequence. The decoder generates output representations using masked self-attention and attention over encoder outputs.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p40_c0",
+        "lec19_transformer_p46_c0",
+        "lec19_transformer_p47_c0",
+        "lec19_transformer_p39_c0",
+        "lec19_transformer_p48_c0"
+      ],
+      "relevant_chunk_count": 5,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p81_c0",
+        "lec19_transformer_p42_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p47_c0",
+          "lec19_transformer_p39_c0",
+          "lec19_transformer_p48_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p47_c0",
+          "lec19_transformer_p39_c0",
+          "lec19_transformer_p48_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p47_c0",
+          "lec19_transformer_p39_c0",
+          "lec19_transformer_p48_c0"
+        ]
+      },
+      "rationale": "Pages 39-40 and 46-48 detail the structural distinction: the encoder processes input representations using bidirectional self-attention, while the decoder generates target tokens autoregressively using masked self-attention and cross-attention over encoder outputs.",
+      "relevant_pages": [
+        39,
+        40,
+        46,
+        47,
+        48
+      ]
+    },
+    {
+      "question_id": "5178ca5a-1231-42b0-bc81-9558afce9a6f",
+      "question_index": 6,
+      "question": "Does the original Transformer use positional encoding in both encoder and decoder inputs?",
+      "reference_answer": "Yes. The original Transformer adds positional encodings to input embeddings in both the encoder and decoder stacks.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p40_c0",
+        "lec19_transformer_p26_c0",
+        "lec19_transformer_p46_c0",
+        "lec19_transformer_p25_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p52_c0",
+        "lec19_transformer_p26_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 25.0,
+        "recall_at_5": 25.0,
+        "recall_at_10": 25.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [
+          "lec19_transformer_p26_c0"
+        ],
+        "matched_at_5": [
+          "lec19_transformer_p26_c0"
+        ],
+        "matched_at_10": [
+          "lec19_transformer_p26_c0"
+        ]
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p25_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p25_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p25_c0"
+        ]
+      },
+      "rationale": "Pages 25-26, 40, and 46 confirm that positional encoding vectors are added to input token embeddings at the base of both the encoder stack and the decoder stack.",
+      "relevant_pages": [
+        25,
+        26,
+        40,
+        46
+      ]
+    },
+    {
+      "question_id": "61c97657-4c1e-4be0-a42e-71aecf34be95",
+      "question_index": 7,
+      "question": "What is the purpose of masking in decoder self-attention?",
+      "reference_answer": "Masking prevents each decoder position from using future target tokens, preserving autoregressive prediction.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p46_c0",
+        "lec19_transformer_p45_c0",
+        "lec19_transformer_p44_c0",
+        "lec19_transformer_p43_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p22_c0",
+        "lec19_transformer_p56_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p45_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p43_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p45_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p43_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p45_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p43_c0"
+        ]
+      },
+      "rationale": "Pages 43-46 explain causal triangular masking in decoder self-attention, which sets future position scores to -infinity so predictions at position i depend only on known outputs at positions < i.",
+      "relevant_pages": [
+        43,
+        44,
+        45,
+        46
+      ]
+    },
+    {
+      "question_id": "701d6010-d4e1-4f12-a616-41d9da78fdb3",
+      "question_index": 8,
+      "question": "Does the original Transformer require recurrence to process sequences?",
+      "reference_answer": "No. The original Transformer replaces recurrent sequence processing with attention-based layers, enabling more parallel computation during training.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p40_c0",
+        "lec19_transformer_p26_c0",
+        "lec19_transformer_p46_c0",
+        "lec19_transformer_p25_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p85_c0",
+        "lec19_transformer_p52_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p25_c0",
+          "lec19_transformer_p26_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p25_c0",
+          "lec19_transformer_p26_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p25_c0",
+          "lec19_transformer_p26_c0"
+        ]
+      },
+      "rationale": "Pages 25-26, 40, and 46 confirm that positional encoding vectors are added to input token embeddings at the base of both the encoder stack and the decoder stack.",
+      "relevant_pages": [
+        25,
+        26,
+        40,
+        46
+      ]
+    },
+    {
+      "question_id": "8afc3379-9ec1-4a59-97a7-a1b48a67af67",
+      "question_index": 9,
+      "question": "What is the difference between self-attention and encoder-decoder attention?",
+      "reference_answer": "Self-attention relates positions within the same sequence. In the original Transformer decoder, encoder-decoder attention uses decoder representations as queries and encoder outputs as keys and values.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p40_c0",
+        "lec19_transformer_p46_c0",
+        "lec19_transformer_p47_c0",
+        "lec19_transformer_p39_c0",
+        "lec19_transformer_p48_c0"
+      ],
+      "relevant_chunk_count": 5,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p22_c0",
+        "lec19_transformer_p56_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p47_c0",
+          "lec19_transformer_p39_c0",
+          "lec19_transformer_p48_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p47_c0",
+          "lec19_transformer_p39_c0",
+          "lec19_transformer_p48_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p46_c0",
+          "lec19_transformer_p47_c0",
+          "lec19_transformer_p39_c0",
+          "lec19_transformer_p48_c0"
+        ]
+      },
+      "rationale": "Pages 39-40 and 46-48 detail the structural distinction: the encoder processes input representations using bidirectional self-attention, while the decoder generates target tokens autoregressively using masked self-attention and cross-attention over encoder outputs.",
+      "relevant_pages": [
+        39,
+        40,
+        46,
+        47,
+        48
+      ]
+    },
+    {
+      "question_id": "a985fe54-b410-4e24-8ea9-a4e029923607",
+      "question_index": 10,
+      "question": "Why does the Transformer use scaled dot-product attention?",
+      "reference_answer": "It scales query-key dot products by the square root of the key dimension before applying softmax, helping prevent excessively large dot products from pushing softmax into regions with very small gradients.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p23_c0",
+        "lec19_transformer_p21_c0",
+        "lec19_transformer_p22_c0"
+      ],
+      "relevant_chunk_count": 3,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p98_c0",
+        "lec19_transformer_p90_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p21_c0",
+          "lec19_transformer_p23_c0",
+          "lec19_transformer_p22_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p21_c0",
+          "lec19_transformer_p23_c0",
+          "lec19_transformer_p22_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p21_c0",
+          "lec19_transformer_p23_c0",
+          "lec19_transformer_p22_c0"
+        ]
+      },
+      "rationale": "Pages 21-23 explain that dividing query-key dot products by sqrt(d_k) prevents dot products from growing large for large dimensions, which would otherwise push softmax into regions with extremely small gradients.",
+      "relevant_pages": [
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "question_id": "aa516ace-1af7-4cf7-8253-e9af15b9b0f7",
+      "question_index": 11,
+      "question": "How does the original Transformer decoder prevent access to future target tokens?",
+      "reference_answer": "The decoder uses masked self-attention so a position cannot attend to subsequent target positions during autoregressive generation.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p46_c0",
+        "lec19_transformer_p45_c0",
+        "lec19_transformer_p44_c0",
+        "lec19_transformer_p43_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p46_c0",
+        "lec19_transformer_p42_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 25.0,
+        "recall_at_5": 25.0,
+        "recall_at_10": 25.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [
+          "lec19_transformer_p46_c0"
+        ],
+        "matched_at_5": [
+          "lec19_transformer_p46_c0"
+        ],
+        "matched_at_10": [
+          "lec19_transformer_p46_c0"
+        ]
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p45_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p43_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p45_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p43_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p45_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p43_c0"
+        ]
+      },
+      "rationale": "Pages 43-46 illustrate masked self-attention using a lower-triangular mask that zeros out / sets to -inf attention weights for future token indices.",
+      "relevant_pages": [
+        43,
+        44,
+        45,
+        46
+      ]
+    },
+    {
+      "question_id": "aa753792-b207-48bf-965f-58976f1ee085",
+      "question_index": 12,
+      "question": "What are the main components of the Transformer encoder layer?",
+      "reference_answer": "The original Transformer encoder layer contains a multi-head self-attention sublayer and a position-wise feed-forward network, with residual connections and layer normalization.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p40_c0",
+        "lec19_transformer_p39_c0",
+        "lec19_transformer_p7_c0"
+      ],
+      "relevant_chunk_count": 3,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p39_c0",
+        "lec19_transformer_p40_c0",
+        "lec19_transformer_p48_c0",
+        "lec19_transformer_p55_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 66.67,
+        "recall_at_5": 66.67,
+        "recall_at_10": 66.67
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p39_c0"
+        ],
+        "matched_at_5": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p39_c0"
+        ],
+        "matched_at_10": [
+          "lec19_transformer_p40_c0",
+          "lec19_transformer_p39_c0"
+        ]
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p7_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p7_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p7_c0"
+        ]
+      },
+      "rationale": "Pages 7, 39, and 40 list the sublayers of an encoder layer: Multi-Head Self-Attention, Position-wise Feed-Forward Network, Residual Connections (Add), and Layer Normalization (Norm).",
+      "relevant_pages": [
+        7,
+        39,
+        40
+      ]
+    },
+    {
+      "question_id": "abac51ff-5396-4bb7-9df3-149ed9f52114",
+      "question_index": 13,
+      "question": "Why does the original Transformer scale dot products by the square root of the key dimension?",
+      "reference_answer": "Scaling controls the magnitude of dot products so the softmax does not become excessively peaked, which can produce very small gradients.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p23_c0",
+        "lec19_transformer_p21_c0",
+        "lec19_transformer_p22_c0"
+      ],
+      "relevant_chunk_count": 3,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p98_c0",
+        "lec19_transformer_p90_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p21_c0",
+          "lec19_transformer_p23_c0",
+          "lec19_transformer_p22_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p21_c0",
+          "lec19_transformer_p23_c0",
+          "lec19_transformer_p22_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p21_c0",
+          "lec19_transformer_p23_c0",
+          "lec19_transformer_p22_c0"
+        ]
+      },
+      "rationale": "Pages 21-23 provide the mathematical explanation that for large vector dimension d_k, dot products grow large in magnitude, causing softmax to yield extremely peaked distributions with near-zero gradients.",
+      "relevant_pages": [
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "question_id": "b03659c4-83ad-4c6c-a3f7-370aab9c73e7",
+      "question_index": 14,
+      "question": "What is the role of the position-wise feed-forward network?",
+      "reference_answer": "It applies the same feed-forward transformation independently at each sequence position after attention.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p29_c0",
+        "lec19_transformer_p31_c0",
+        "lec19_transformer_p30_c0"
+      ],
+      "relevant_chunk_count": 3,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p39_c0",
+        "lec19_transformer_p55_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p29_c0",
+          "lec19_transformer_p31_c0",
+          "lec19_transformer_p30_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p29_c0",
+          "lec19_transformer_p31_c0",
+          "lec19_transformer_p30_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p29_c0",
+          "lec19_transformer_p31_c0",
+          "lec19_transformer_p30_c0"
+        ]
+      },
+      "rationale": "Pages 29-31 describe the position-wise Feed-Forward Network (FFN), consisting of two linear transformations with a non-linear activation (ReLU/GELU) applied identically to each position.",
+      "relevant_pages": [
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "question_id": "b7f76ca4-1234-467b-a6bc-4f78a3c60406",
+      "question_index": 15,
+      "question": "What is the main advantage of attention over recurrence in the original Transformer?",
+      "reference_answer": "Attention enables more parallel computation and provides shorter paths for relating distant positions, although self-attention has its own sequence-length-related computational costs.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p9_c0",
+        "lec19_transformer_p8_c0",
+        "lec19_transformer_p3_c0",
+        "lec19_transformer_p6_c0",
+        "lec19_transformer_p4_c0"
+      ],
+      "relevant_chunk_count": 5,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p56_c0",
+        "lec19_transformer_p57_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p9_c0",
+          "lec19_transformer_p8_c0",
+          "lec19_transformer_p3_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p4_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p9_c0",
+          "lec19_transformer_p8_c0",
+          "lec19_transformer_p3_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p4_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p9_c0",
+          "lec19_transformer_p8_c0",
+          "lec19_transformer_p3_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p4_c0"
+        ]
+      },
+      "rationale": "Pages 3-4, 6, and 8-9 highlight that attention allows fully parallelizable training across all sequence positions and creates constant O(1) path lengths between any pair of input tokens.",
+      "relevant_pages": [
+        3,
+        4,
+        6,
+        8,
+        9
+      ]
+    },
+    {
+      "question_id": "c4eabad9-b121-4caa-9f97-bb3ddeb5fc66",
+      "question_index": 16,
+      "question": "How does the Transformer process tokens in parallel during training?",
+      "reference_answer": "Unlike recurrent models that process tokens step by step, the Transformer can compute attention across sequence positions in parallel during training, subject to masking.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p18_c0",
+        "lec19_transformer_p19_c0",
+        "lec19_transformer_p6_c0",
+        "lec19_transformer_p44_c0",
+        "lec19_transformer_p20_c0"
+      ],
+      "relevant_chunk_count": 5,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p45_c0",
+        "lec19_transformer_p90_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p20_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p20_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p6_c0",
+          "lec19_transformer_p44_c0",
+          "lec19_transformer_p20_c0"
+        ]
+      },
+      "rationale": "Pages 6, 18-20, and 44 demonstrate that all queries, keys, and values for the entire sequence are packed into matrices (Q, K, V), allowing simultaneous matrix multiplications during training.",
+      "relevant_pages": [
+        6,
+        18,
+        19,
+        20,
+        44
+      ]
+    },
+    {
+      "question_id": "c7d26568-eb07-4122-bd8d-997467378086",
+      "question_index": 17,
+      "question": "What are queries, keys, and values in attention?",
+      "reference_answer": "Queries represent what a position is looking for, keys are compared with queries to produce attention scores, and values provide the information combined using those scores.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p16_c0",
+        "lec19_transformer_p18_c0",
+        "lec19_transformer_p9_c0",
+        "lec19_transformer_p17_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p18_c0",
+        "lec19_transformer_p19_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 25.0,
+        "recall_at_5": 25.0,
+        "recall_at_10": 25.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [
+          "lec19_transformer_p18_c0"
+        ],
+        "matched_at_5": [
+          "lec19_transformer_p18_c0"
+        ],
+        "matched_at_10": [
+          "lec19_transformer_p18_c0"
+        ]
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p16_c0",
+          "lec19_transformer_p9_c0",
+          "lec19_transformer_p17_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p16_c0",
+          "lec19_transformer_p9_c0",
+          "lec19_transformer_p17_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p16_c0",
+          "lec19_transformer_p9_c0",
+          "lec19_transformer_p17_c0"
+        ]
+      },
+      "rationale": "Pages 9 and 16-18 define queries (what a token is looking for), keys (what a token contains / addresses), and values (the actual content / representation vectors to be retrieved).",
+      "relevant_pages": [
+        9,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "question_id": "d6362cf9-17fd-4b65-b4d9-a7a8129a774e",
+      "question_index": 18,
+      "question": "What does the softmax function do in scaled dot-product attention?",
+      "reference_answer": "Softmax converts the scaled query-key scores into attention weights that are used to combine value vectors.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p20_c0",
+        "lec19_transformer_p19_c0",
+        "lec19_transformer_p21_c0"
+      ],
+      "relevant_chunk_count": 3,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p57_c0",
+        "lec19_transformer_p56_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p21_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p21_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p21_c0"
+        ]
+      },
+      "rationale": "Pages 19-21 show that softmax takes raw scaled dot-product logits and normalizes them into non-negative attention weights that sum to 1.0 across the sequence.",
+      "relevant_pages": [
+        19,
+        20,
+        21
+      ]
+    },
+    {
+      "question_id": "d8de3818-206e-4225-9d5a-08b045397b98",
+      "question_index": 19,
+      "question": "What is the purpose of positional encoding?",
+      "reference_answer": "Positional encoding provides information about token positions because attention alone does not inherently encode sequence order.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p28_c0",
+        "lec19_transformer_p26_c0",
+        "lec19_transformer_p27_c0",
+        "lec19_transformer_p25_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p26_c0",
+        "lec19_transformer_p54_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 25.0,
+        "recall_at_5": 25.0,
+        "recall_at_10": 25.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [
+          "lec19_transformer_p26_c0"
+        ],
+        "matched_at_5": [
+          "lec19_transformer_p26_c0"
+        ],
+        "matched_at_10": [
+          "lec19_transformer_p26_c0"
+        ]
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p28_c0",
+          "lec19_transformer_p27_c0",
+          "lec19_transformer_p25_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p28_c0",
+          "lec19_transformer_p27_c0",
+          "lec19_transformer_p25_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p28_c0",
+          "lec19_transformer_p27_c0",
+          "lec19_transformer_p25_c0"
+        ]
+      },
+      "rationale": "Pages 25-28 explain that because self-attention is permutation-equivariant and does not inherently know sequence order, positional encodings are injected to represent relative or absolute token positions.",
+      "relevant_pages": [
+        25,
+        26,
+        27,
+        28
+      ]
+    },
+    {
+      "question_id": "e085d5ec-5aa2-45ec-811c-77ba8fe828db",
+      "question_index": 20,
+      "question": "What is self-attention in a Transformer?",
+      "reference_answer": "Self-attention allows each token representation to incorporate information from other positions in the same sequence, using query, key, and value representations.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p19_c0",
+        "lec19_transformer_p18_c0",
+        "lec19_transformer_p9_c0",
+        "lec19_transformer_p20_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p22_c0",
+        "lec19_transformer_p56_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p9_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p9_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p9_c0"
+        ]
+      },
+      "rationale": "Pages 9 and 18-20 explain self-attention as the mechanism where an input sequence attends to itself, generating contextual representations by computing attention weights across all tokens in the sequence.",
+      "relevant_pages": [
+        9,
+        18,
+        19,
+        20
+      ]
+    },
+    {
+      "question_id": "4d7e607b-525b-4725-a796-e680dde8e680",
+      "question_index": 21,
+      "question": "What is self-attention in a Transformer?",
+      "reference_answer": "Self-attention allows each token to incorporate information from other positions in the sequence using query, key, and value representations.",
+      "label_status": "verified",
+      "relevant_chunk_ids": [
+        "lec19_transformer_p19_c0",
+        "lec19_transformer_p18_c0",
+        "lec19_transformer_p9_c0",
+        "lec19_transformer_p20_c0"
+      ],
+      "relevant_chunk_count": 4,
+      "retrieved_chunk_ids": [
+        "lec19_transformer_p22_c0",
+        "lec19_transformer_p56_c0"
+      ],
+      "recalls_at_k": {
+        "recall_at_3": 0.0,
+        "recall_at_5": 0.0,
+        "recall_at_10": 0.0
+      },
+      "matched_ids_at_k": {
+        "matched_at_3": [],
+        "matched_at_5": [],
+        "matched_at_10": []
+      },
+      "missed_ids_at_k": {
+        "missed_at_3": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p9_c0"
+        ],
+        "missed_at_5": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p9_c0"
+        ],
+        "missed_at_10": [
+          "lec19_transformer_p20_c0",
+          "lec19_transformer_p18_c0",
+          "lec19_transformer_p19_c0",
+          "lec19_transformer_p9_c0"
+        ]
+      },
+      "rationale": "Pages 9 and 18-20 explain self-attention as the mechanism where an input sequence attends to itself, generating contextual representations by computing attention weights across all tokens in the sequence.",
+      "relevant_pages": [
+        9,
+        18,
+        19,
+        20
+      ]
+    }
+  ]
+}

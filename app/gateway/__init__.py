@@ -6,7 +6,10 @@ from .fallback import FallbackManager
 from .llm_gateway import GatewayChatModel, LLMGateway, gateway_chat_model, llm_gateway
 from .model_router import ModelRouter, global_model_router
 from .rate_limiter import RateLimiter, global_rate_limiter
-from services.redis_service import RedisService, redis_service
+try:
+    from app.services.redis_service import RedisService, redis_service
+except ModuleNotFoundError:
+    from services.redis_service import RedisService, redis_service
 
 __all__ = [
     "LLMGateway",

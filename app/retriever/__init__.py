@@ -4,7 +4,7 @@ from .crag import CRAGEvaluator, global_crag_evaluator
 from .dense_retriever import DenseRetriever, global_dense_retriever
 from .hybrid_retriever import HybridRetriever, global_hybrid_retriever
 from .query_refiner import QueryRefiner, global_query_refiner
-from .reranker import CrossEncoderReranker, global_reranker
+from .reranker import CrossEncoderReranker, global_reranker, get_reranker, get_cross_encoder, rerank_documents
 from .sparse_retriever import SparseRetriever, global_sparse_retriever
 
 __all__ = [
@@ -16,8 +16,12 @@ __all__ = [
     "global_hybrid_retriever",
     "CrossEncoderReranker",
     "global_reranker",
+    "get_reranker",
+    "get_cross_encoder",
+    "rerank_documents",
     "CRAGEvaluator",
     "global_crag_evaluator",
     "QueryRefiner",
     "global_query_refiner",
 ]
+

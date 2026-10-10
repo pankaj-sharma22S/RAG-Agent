@@ -3,7 +3,17 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
+from pathlib import Path
 from contextlib import asynccontextmanager
+
+_APP_DIR = Path(__file__).resolve().parent
+_ROOT_DIR = _APP_DIR.parent
+for _p in [str(_APP_DIR), str(_ROOT_DIR)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -77,6 +87,9 @@ app.include_router(api_v1_router)
 app.include_router(legacy_upload_router, prefix="/api")
 app.include_router(legacy_github_router, prefix="/api")
 app.include_router(legacy_chat_router, prefix="/api")
+from api.v1.images import router as images_router
+app.include_router(images_router, prefix="/api")
+
 
 
 @app.get("/", summary="Root status check")

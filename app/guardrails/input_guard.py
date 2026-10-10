@@ -14,10 +14,20 @@ except ModuleNotFoundError:
     from schemas.guardrail_schemas import SanitizedInput
 
 
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
+
+
 class InputGuard:
     """End-to-end user input pre-processor."""
 
     @staticmethod
+    @safe_traceable(name="input_guardrails", run_type="chain", tags=["guardrails", "security", "pii", "injection"])
     def process(text: str) -> SanitizedInput:
         """Run full input sanitization, PII masking, and injection scanning."""
         cleaned, truncated = sanitize_text(text)

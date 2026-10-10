@@ -78,7 +78,12 @@ async def upload_file(
                         detail="File is too large. The maximum upload size is 25 MB.",
                     )
                 buffer.write(chunk)
-        ingest_file(str(file_path), session_id=thread_id)
+        chunks = ingest_file(str(file_path), session_id=thread_id, force_reindex=True)
+        if not chunks:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unable to extract readable text or index chunks from '{filename}'. Please verify the file is not empty or corrupted.",
+            )
     except HTTPException:
         raise
     except Exception as error:
@@ -91,7 +96,9 @@ async def upload_file(
         "filename": file.filename,
         "content_type": file.content_type,
         "location": str(file_path),
-        "status": "uploaded"
+        "status": "indexed",
+        "chunks_indexed": len(chunks),
+        "thread_id": thread_id,
     }
 
 

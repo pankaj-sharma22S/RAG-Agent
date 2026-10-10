@@ -27,6 +27,28 @@ logger = logging.getLogger("IngestPipeline")
 INDEXED_SOURCE_HASHES: set[tuple[str, str]] = set()
 
 
+def sanitize_chroma_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Ensure metadata contains only non-null primitives or non-empty lists compatible with ChromaDB."""
+    cleaned: dict[str, Any] = {}
+    for key, value in metadata.items():
+        if value is None:
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            cleaned[key] = value
+        elif isinstance(value, list):
+            if len(value) > 0 and all(isinstance(v, (str, int, float, bool)) for v in value):
+                cleaned[key] = value
+            elif len(value) > 0:
+                cleaned[key] = [str(v) for v in value]
+            # Empty lists are omitted so Chroma does not throw ValueError
+        elif isinstance(value, dict):
+            import json
+            cleaned[key] = json.dumps(value)
+        else:
+            cleaned[key] = str(value)
+    return cleaned
+
+
 def calculate_source_hash(source_id: str, content: str) -> str:
     """Compute SHA-256 fingerprint for document content to prevent repeated re-indexing."""
     raw = f"{source_id}:{content[:50000]}".encode("utf-8", errors="ignore")
@@ -74,8 +96,8 @@ def register_active_source(document, session_id: str) -> dict[str, Any]:
 
 
 @safe_traceable(name="Ingest Document Pipeline", run_type="chain", tags=["rag-agent", "ingestion", "indexing"])
-def ingest_document(document, session_id: str):
-    """Chunk, embed, and index a document into ChromaDB and BM25, skipping if already indexed."""
+def ingest_document(document, session_id: str, force_reindex: bool = False):
+    """Chunk, embed, and index a document into ChromaDB and BM25, refreshing index if forced."""
     if not session_id or not session_id.strip():
         raise ValueError("A session_id is required to index a document.")
 
@@ -87,11 +109,7 @@ def ingest_document(document, session_id: str):
     timestamp = document.metadata.get("timestamp")
 
     source_hash = calculate_source_hash(str(source_id), document.page_content)
-
-    # 1. Skip if already indexed
-    if is_source_already_indexed(clean_session_id, source_hash):
-        logger.info(f"Source '{source_id}' (hash: {source_hash[:8]}) is already indexed for session '{clean_session_id}'. Skipping.")
-        return []
+    already_indexed = is_source_already_indexed(clean_session_id, source_hash)
 
     source_meta = {
         "source_id": str(source_id),
@@ -110,11 +128,21 @@ def ingest_document(document, session_id: str):
     document.metadata = {**document.metadata, **source_meta}
     chunks = split_documents([document])
 
-    # Add to ChromaDB vector store
-    get_vectorstore().add_documents(chunks)
+    # If already indexed and not forcing reindex, return existing chunk representations
+    if already_indexed and not force_reindex:
+        logger.info(f"Source '{source_id}' (hash: {source_hash[:8]}) already indexed for session '{clean_session_id}'. Returning {len(chunks)} chunks.")
+        return chunks
 
-    # Synchronize BM25 sparse index
-    global_sparse_retriever.index_documents(chunks, session_id=clean_session_id)
+    # Sanitize metadata for ChromaDB compatibility (omit empty lists, serialize dicts, drop None)
+    for chunk in chunks:
+        if chunk.metadata:
+            chunk.metadata = sanitize_chroma_metadata(chunk.metadata)
+
+    # Add to ChromaDB vector store
+    if chunks:
+        get_vectorstore().add_documents(chunks)
+        # Synchronize BM25 sparse index
+        global_sparse_retriever.index_documents(chunks, session_id=clean_session_id)
 
     # Record hash in memory to prevent duplicate indexing
     INDEXED_SOURCE_HASHES.add((clean_session_id, source_hash))
@@ -129,7 +157,7 @@ def ingest_document(document, session_id: str):
 
 
 @safe_traceable(name="Ingest File", run_type="chain", tags=["rag-agent", "ingestion", "file"])
-def ingest_file(file_path: str, session_id: str, lazy: bool = False):
+def ingest_file(file_path: str, session_id: str, lazy: bool = False, force_reindex: bool = True):
     """Load, scan, and index an uploaded document or media file."""
     try:
         documents = load_document(file_path)
@@ -150,7 +178,7 @@ def ingest_file(file_path: str, session_id: str, lazy: bool = False):
 
     chunks = []
     for document in documents:
-        chunks.extend(ingest_document(document, session_id))
+        chunks.extend(ingest_document(document, session_id, force_reindex=force_reindex))
     return chunks
 
 

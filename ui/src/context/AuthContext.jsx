@@ -84,6 +84,9 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/verify-email`,
+      },
     });
     return { data, error };
   };

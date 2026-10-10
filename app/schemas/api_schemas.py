@@ -69,6 +69,14 @@ class ChatRequest(BaseModel):
         default=None,
         description="Optional active source dictionary metadata (document, video, or GitHub URL).",
     )
+    api_key: Optional[str] = Field(
+        default=None,
+        description="Optional runtime Gemini / LLM API key override.",
+    )
+    gemini_api_key: Optional[str] = Field(
+        default=None,
+        description="Optional runtime Gemini API key override.",
+    )
 
 
 class ChatResponse(BaseModel):

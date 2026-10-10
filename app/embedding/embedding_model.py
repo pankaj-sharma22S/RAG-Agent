@@ -1,38 +1,33 @@
-"""High-performance singleton embedding model with in-memory caching and optimized batching."""
+"""Lightweight high-performance singleton embedding model powered by FastEmbed (ONNX Runtime).
+
+Features:
+- Pure CPU ONNX Runtime execution (zero heavy PyTorch / CUDA / graphics dependencies).
+- Thread-safe in-memory caching wrapper.
+- Automatic batching and embedding normalization.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import logging
 import os
-from pathlib import Path
-import torch
 from threading import Lock
-from typing import Any
+from typing import Any, List
 from langchain_core.embeddings import Embeddings
-try:
-    from langchain_huggingface import HuggingFaceEmbeddings
-except ModuleNotFoundError:
-    try:
-        from langchain_community.embeddings import HuggingFaceEmbeddings
-    except ModuleNotFoundError as err:
-        raise ModuleNotFoundError(
-            "Neither 'langchain-huggingface' nor 'langchain-community' is installed. "
-            "Please install langchain-huggingface using: pip install langchain-huggingface"
-        ) from err
 
 logger = logging.getLogger("EmbeddingModel")
 
-# Configure torch threads for maximum CPU throughput
 try:
-    if not torch.cuda.is_available():
-        torch.set_num_threads(min(8, os.cpu_count() or 4))
+    from app.tracing import safe_traceable
 except Exception:
-    pass
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
 
 DEFAULT_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
 
-_base_embedding_model: HuggingFaceEmbeddings | None = None
+_base_embedding_model: Embeddings | None = None
 _cached_embeddings_wrapper: CachedEmbeddings | None = None
 _init_lock = Lock()
 _init_count = 0
@@ -40,7 +35,7 @@ _first_init_ms = 0.0
 
 
 class CachedEmbeddings(Embeddings):
-    """Thread-safe in-memory caching wrapper around HuggingFaceEmbeddings."""
+    """Thread-safe in-memory caching wrapper around embedding models."""
 
     def __init__(self, base_embeddings: Embeddings, model_name: str = DEFAULT_MODEL_NAME, max_size: int = 10000) -> None:
         self.base = base_embeddings
@@ -55,6 +50,7 @@ class CachedEmbeddings(Embeddings):
         key = f"{text.strip()}|{self.model_name}|v1.5"
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
+    @safe_traceable(name="embed_query", run_type="embedding", tags=["embedding", "fastembed", "onnx"])
     def embed_query(self, text: str) -> list[float]:
         h = self._hash(text)
         with self._lock:
@@ -66,7 +62,6 @@ class CachedEmbeddings(Embeddings):
         vec = self.base.embed_query(text)
         with self._lock:
             if len(self._cache) >= self.max_size:
-                # Evict 20% oldest entries
                 keys = list(self._cache.keys())[:2000]
                 for k in keys:
                     del self._cache[k]
@@ -115,7 +110,7 @@ class CachedEmbeddings(Embeddings):
 
 
 def get_embedding_model() -> CachedEmbeddings:
-    """Retrieve or lazily initialize the singleton cached embedding model."""
+    """Retrieve or lazily initialize the singleton lightweight cached embedding model."""
     global _base_embedding_model, _cached_embeddings_wrapper, _init_count, _first_init_ms
 
     if _cached_embeddings_wrapper is None:
@@ -124,56 +119,29 @@ def get_embedding_model() -> CachedEmbeddings:
                 import time
                 t0 = time.perf_counter()
                 model_name = os.getenv("EMBEDDING_MODEL_NAME", DEFAULT_MODEL_NAME)
-                logger.info(f"Initializing embedding model '{model_name}'...")
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                # Prefer an already-downloaded Hugging Face snapshot.  This is
-                # important for the local/offline deployment path: passing the
-                # model id directly makes sentence-transformers probe the Hub
-                # for optional files (such as modules.json), even when the
-                # actual model weights are already cached.
-                resolved_model_name = _resolve_local_model(model_name)
-                _base_embedding_model = HuggingFaceEmbeddings(
-                    model_name=resolved_model_name,
-                    model_kwargs={"device": device, "local_files_only": True},
-                    encode_kwargs={"batch_size": 64, "normalize_embeddings": True},
-                )
+                logger.info(f"Initializing lightweight ONNX embedding model '{model_name}'...")
+
+                try:
+                    from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+                    _base_embedding_model = FastEmbedEmbeddings(model_name=model_name)
+                    logger.info("FastEmbed ONNX engine loaded successfully (zero PyTorch dependency).")
+                except Exception as err:
+                    logger.warning("FastEmbed not available, attempting fallback: %s", err)
+                    try:
+                        from langchain_huggingface import HuggingFaceEmbeddings
+                        _base_embedding_model = HuggingFaceEmbeddings(model_name=model_name)
+                    except Exception as inner_err:
+                        raise RuntimeError(f"Failed to initialize embedding model: {inner_err}") from inner_err
+
                 _cached_embeddings_wrapper = CachedEmbeddings(_base_embedding_model, model_name=model_name)
                 _first_init_ms = round((time.perf_counter() - t0) * 1000, 2)
                 _init_count += 1
-                # Warm-up call
                 try:
                     _cached_embeddings_wrapper.embed_query("warmup query")
                 except Exception:
                     pass
-                logger.info(f"Embedding model '{model_name}' initialized on {device} with in-memory caching.")
 
     return _cached_embeddings_wrapper
-
-
-def _resolve_local_model(model_name: str) -> str:
-    """Resolve a cached Hugging Face model without making a network request."""
-    explicit_path = Path(model_name).expanduser()
-    if explicit_path.is_dir():
-        return str(explicit_path)
-
-    if "/" not in model_name:
-        return model_name
-
-    cache_root = Path(
-        os.getenv("HF_HOME", Path.home() / ".cache" / "huggingface")
-    ) / "hub"
-    cache_dir = cache_root / f"models--{model_name.replace('/', '--')}" / "snapshots"
-    if cache_dir.is_dir():
-        snapshots = sorted(
-            (path for path in cache_dir.iterdir() if path.is_dir()),
-            key=lambda path: path.stat().st_mtime,
-            reverse=True,
-        )
-        if snapshots:
-            logger.info("Using cached embedding model snapshot: %s", snapshots[0])
-            return str(snapshots[0])
-
-    return model_name
 
 
 def get_embedding_lifecycle_stats() -> dict[str, Any]:
@@ -181,6 +149,7 @@ def get_embedding_lifecycle_stats() -> dict[str, Any]:
     cache_stats = _cached_embeddings_wrapper.stats() if _cached_embeddings_wrapper else {}
     return {
         "component": "EmbeddingModel",
+        "engine": "FastEmbed_ONNX",
         "initialization_count": _init_count,
         "first_init_ms": _first_init_ms,
         "cache": cache_stats,

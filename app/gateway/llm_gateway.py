@@ -44,6 +44,14 @@ except ModuleNotFoundError:
     )
     from guardrails.pii import global_pii_guard
 
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
+
 logger = logging.getLogger("LLMGateway")
 
 
@@ -96,6 +104,7 @@ class LLMGateway:
                 formatted.append({"role": "user", "content": str(msg)})
         return formatted
 
+    @safe_traceable(name="llm_gateway_invoke", run_type="llm", tags=["gateway", "llm", "multi-tier-fallback"])
     def invoke(self, request: LLMRequest) -> LLMResponse:
         """Execute completion through the gateway with caching, routing, and fallback."""
         start_time = time.time()
@@ -106,6 +115,7 @@ class LLMGateway:
         candidates = global_model_router.get_provider_chain(
             complexity=request.complexity,
             force_provider=request.force_provider,
+            runtime_gemini_key=request.api_key,
         )
 
         timeout = request.timeout if request.timeout is not None else self.default_timeout
@@ -271,46 +281,15 @@ class LLMGateway:
             except Exception as error:
                 last_exception = error
                 err_str = str(error).lower()
-                if "rate_limit" in err_str or "resource_exhausted" in err_str or "429" in err_str:
-                    logger.warning(f"Rate limit on [{provider}/{model}]. Backing off 2.1s for free tier quota...")
-                    time.sleep(2.1)
-                    try:
-                        response = litellm.completion(**litellm_kwargs)
-                        duration_ms = (time.time() - start_time) * 1000
-                        content = _sanitize_model_content(response.choices[0].message.content or "")
-                        structured_obj = None
-                        if request.response_format and issubclass(request.response_format, BaseModel):
-                            try:
-                                structured_obj = request.response_format.model_validate_json(content)
-                            except Exception:
-                                pass
-                        return LLMResponse(
-                            content=content,
-                            structured_data=structured_obj,
-                            model=model,
-                            provider=provider,
-                            prompt_tokens=0,
-                            completion_tokens=0,
-                            total_tokens=0,
-                            latency_ms=duration_ms,
-                            cache_hit=False,
-                            metadata=LLMMetadata(
-                                request_id=request_id,
-                                model=model,
-                                provider=provider,
-                                latency_ms=duration_ms,
-                                input_tokens=0,
-                                output_tokens=0,
-                                total_tokens=0,
-                                estimated_cost_usd=0.0,
-                            ),
-                        )
-                    except Exception as retry_err:
-                        error = retry_err
+                is_quota_exhausted = any(k in err_str for k in ["resource_exhausted", "daily", "quota", "per_minute", "429", "rate_limit"])
+                if is_quota_exhausted:
+                    logger.warning(f"Rate limit / Quota exhausted on [{provider}/{model}]. Marking unhealthy for 1h and failing over instantly...")
+                    global_model_router.mark_provider_unhealthy(provider, cooldown_seconds=3600.0)
+                    errors.append((provider, model, error))
+                    continue
 
                 errors.append((provider, model, error))
                 logger.warning(f"Provider [{provider}/{model}] failed: {error}")
-                # Mark provider as unhealthy for 60s
                 global_model_router.mark_provider_unhealthy(provider, cooldown_seconds=60.0)
                 continue
 
@@ -326,6 +305,7 @@ class LLMGateway:
         candidates = global_model_router.get_provider_chain(
             complexity=request.complexity,
             force_provider=request.force_provider,
+            runtime_gemini_key=request.api_key,
         )
         timeout = request.timeout if request.timeout is not None else self.default_timeout
 
@@ -359,35 +339,21 @@ class LLMGateway:
                     litellm_kwargs["thinking"] = {"type": "disabled"}
 
                 response = litellm.completion(**litellm_kwargs)
-                streamed_content: list[str] = []
+                yielded_any = False
                 for chunk in response:
                     delta = chunk.choices[0].delta.content or ""
                     if delta:
-                        streamed_content.append(delta)
-                # Buffer before yielding so secrets split across token chunks
-                # cannot bypass the shared redaction policy.
-                safe_stream = _sanitize_model_content("".join(streamed_content))
-                if safe_stream:
-                    yield safe_stream
-                return
+                        yielded_any = True
+                        yield _sanitize_model_content(delta)
+                if yielded_any:
+                    return
             except Exception as error:
                 err_str = str(error).lower()
-                if "rate_limit" in err_str or "resource_exhausted" in err_str or "429" in err_str:
-                    logger.warning(f"Streaming rate limit on [{provider}/{model}]. Backing off 2.1s...")
-                    time.sleep(2.1)
-                    try:
-                        response = litellm.completion(**litellm_kwargs)
-                        streamed_content = []
-                        for chunk in response:
-                            delta = chunk.choices[0].delta.content or ""
-                            if delta:
-                                streamed_content.append(delta)
-                        safe_stream = _sanitize_model_content("".join(streamed_content))
-                        if safe_stream:
-                            yield safe_stream
-                        return
-                    except Exception as retry_err:
-                        error = retry_err
+                is_quota_exhausted = any(k in err_str for k in ["resource_exhausted", "daily", "quota", "per_minute", "429", "rate_limit"])
+                if is_quota_exhausted:
+                    logger.warning(f"Streaming quota exhausted on [{provider}/{model}]. Marking unhealthy for 1h and failing over instantly...")
+                    global_model_router.mark_provider_unhealthy(provider, cooldown_seconds=3600.0)
+                    continue
 
                 logger.warning(f"Streaming provider [{provider}/{model}] failed: {error}")
                 global_model_router.mark_provider_unhealthy(provider, cooldown_seconds=60.0)
@@ -434,6 +400,7 @@ class GatewayChatModel(BaseChatModel):
     temperature: float = 0.2
     complexity: str = "medium"
     session_id: str = "default"
+    api_key: str | None = Field(default=None)
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -456,6 +423,7 @@ class GatewayChatModel(BaseChatModel):
             complexity=self.complexity,  # type: ignore
             temperature=self.temperature,
             session_id=self.session_id,
+            api_key=self.api_key or kwargs.get("api_key"),
         )
         resp = self.gateway.invoke(req)
         message = AIMessage(content=resp.content)
@@ -473,6 +441,7 @@ class GatewayChatModel(BaseChatModel):
             complexity=self.complexity,  # type: ignore
             temperature=self.temperature,
             session_id=self.session_id,
+            api_key=self.api_key or kwargs.get("api_key"),
         )
         for chunk in self.gateway.stream(req):
             yield AIMessage(content=chunk)

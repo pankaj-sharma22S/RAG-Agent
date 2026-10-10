@@ -1,4 +1,4 @@
-"""Cross-Encoder reranker singleton with batched inference, candidate capping, and score caching."""
+"""Neural Cross-Encoder reranker singleton with score caching, batched inference, and CPU-optimized execution."""
 
 from __future__ import annotations
 
@@ -6,10 +6,19 @@ import hashlib
 import logging
 import os
 from threading import Lock
-from typing import Any
+from typing import Any, List, Tuple
 from langchain_core.documents import Document
 
 logger = logging.getLogger("CrossEncoderReranker")
+
+
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
 
 
 class CrossEncoderReranker:
@@ -41,7 +50,7 @@ class CrossEncoderReranker:
                     try:
                         from sentence_transformers import CrossEncoder
 
-                        logger.info(f"Loading CrossEncoder model: {self.model_name}")
+                        logger.info(f"Loading CrossEncoder model: {self.model_name} (CPU inference)")
                         self._model = CrossEncoder(self.model_name)
                         self.first_init_ms = round((time.perf_counter() - t0) * 1000, 2)
                         self.init_count += 1
@@ -59,7 +68,7 @@ class CrossEncoderReranker:
                         except Exception as inner_err:
                             logger.error(
                                 f"CrossEncoder initialization failed: {inner_err}. "
-                                "Falling back to fusion ranking without cross-encoder scoring."
+                                "Falling back to rank preservation."
                             )
                             self._disabled = True
                             self._model = None
@@ -72,18 +81,19 @@ class CrossEncoderReranker:
         h.update(text[:500].encode("utf-8"))
         return h.hexdigest()
 
+    @safe_traceable(name="cross_encoder_rerank", run_type="chain", tags=["reranker", "cross-encoder", "relevance"])
     def rerank(
         self,
         query: str,
-        documents: list[Document] | list[tuple[Document, float]],
+        documents: List[Document] | List[Tuple[Document, float]],
         top_k: int | None = None,
-    ) -> list[tuple[Document, float, int]]:
-        """Rerank candidates using Cross-Encoder in batches with score caching."""
+    ) -> List[Tuple[Document, float, int]]:
+        """Rerank candidates using neural Cross-Encoder in batches with score caching."""
         k = top_k if top_k is not None else self.rerank_top_k
         if not documents or not query.strip():
             return []
 
-        doc_list: list[Document] = []
+        doc_list: List[Document] = []
         for item in documents:
             if isinstance(item, tuple):
                 doc_list.append(item[0])
@@ -93,19 +103,16 @@ class CrossEncoderReranker:
         if not doc_list:
             return []
 
-        # Bound candidates to max_candidates to prevent excessive cross-encoder inference
         doc_list = doc_list[: self.max_candidates]
-
         model = self._get_model()
 
         if model is None:
             return [(doc, 1.0 - (idx * 0.05), idx + 1) for idx, doc in enumerate(doc_list[:k])]
 
         try:
-            # Check cached scores first to avoid redundant model inference
-            scored_docs: list[tuple[Document, float]] = []
-            uncached_pairs: list[list[str]] = []
-            uncached_indices: list[int] = []
+            scored_docs: List[Tuple[Document, float]] = []
+            uncached_pairs: List[List[str]] = []
+            uncached_indices: List[int] = []
 
             with self._lock:
                 for idx, doc in enumerate(doc_list):
@@ -118,21 +125,26 @@ class CrossEncoderReranker:
                         uncached_pairs.append([query, doc.page_content[:500]])
                         uncached_indices.append(idx)
 
-            # Predict uncached pairs in batch
             if uncached_pairs:
                 scores = model.predict(uncached_pairs)
                 with self._lock:
                     for i, idx in enumerate(uncached_indices):
                         doc = doc_list[idx]
-                        score = float(scores[i]) if hasattr(scores, "__getitem__") else float(scores)
+                        raw_score = float(scores[i]) if hasattr(scores, "__getitem__") else float(scores)
+                        # Normalize logit to [0.0, 1.0] probability via sigmoid
+                        try:
+                            import math
+                            prob = 1.0 / (1.0 + math.exp(-raw_score))
+                        except Exception:
+                            prob = 0.0 if raw_score < 0 else 1.0
+                        calibrated = round(prob, 4)
                         phash = self._pair_hash(query, doc.page_content)
-                        self._score_cache[phash] = score
-                        scored_docs.append((doc, score))
+                        self._score_cache[phash] = calibrated
+                        scored_docs.append((doc, calibrated))
 
-            # Sort descending by cross-encoder score
             scored_docs.sort(key=lambda x: x[1], reverse=True)
 
-            results: list[tuple[Document, float, int]] = []
+            results: List[Tuple[Document, float, int]] = []
             for rank, (doc, score) in enumerate(scored_docs[:k], start=1):
                 results.append((doc, score, rank))
 
@@ -157,3 +169,37 @@ class CrossEncoderReranker:
 
 
 global_reranker = CrossEncoderReranker()
+
+
+def get_reranker() -> CrossEncoderReranker:
+    """Return the global CrossEncoderReranker singleton."""
+    return global_reranker
+
+
+def get_cross_encoder():
+    """Return the underlying CrossEncoder model instance."""
+    return global_reranker._get_model()
+
+
+def rerank_documents(
+    query: str,
+    documents: List[Document] | List[Tuple[Document, float]],
+    top_k: int | None = None,
+) -> List[Document]:
+    """Convenience function to rerank documents and return enriched Document instances."""
+    results = global_reranker.rerank(query=query, documents=documents, top_k=top_k)
+    enriched = []
+    for doc, score, rank in results:
+        doc.metadata["rerank_score"] = score
+        doc.metadata["rerank_rank"] = rank
+        enriched.append(doc)
+    return enriched
+
+
+__all__ = [
+    "CrossEncoderReranker",
+    "global_reranker",
+    "get_reranker",
+    "get_cross_encoder",
+    "rerank_documents",
+]

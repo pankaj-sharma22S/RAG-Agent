@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any
-from ddgs import DDGS
+try:
+    from duckduckgo_search import DDGS
+except Exception:
+    DDGS = None
 
 
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
+
+
+@safe_traceable(name="duckduckgo_search_tool", run_type="tool", tags=["tool", "web_search", "duckduckgo"])
 def search_web_ddg(query: str, max_results: int = 5) -> list[dict[str, str]]:
     """Search DuckDuckGo and return structured web results."""
     try:

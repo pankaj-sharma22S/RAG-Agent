@@ -11,6 +11,14 @@ from langgraph.graph import END, START, StateGraph
 
 from .schemas import DocumentGlobalSummary, TargetedAnswer
 
+try:
+    from app.tracing import safe_traceable
+except Exception:
+    try:
+        from tracing import safe_traceable
+    except Exception:
+        safe_traceable = lambda **kw: lambda f: f
+
 
 class AgentState(TypedDict, total=False):
     question: str
@@ -38,6 +46,7 @@ def _memory_identity(state: AgentState, config: RunnableConfig | None = None) ->
     )
 
 
+@safe_traceable(name="hydrate_memory", run_type="chain", tags=["dual-mode-rag", "memory"])
 def hydrate_memory_node(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
     """Load semantic preferences and recent episodic turns into working memory."""
     try:
@@ -69,6 +78,7 @@ def _resolve_parents(documents: List[Document]) -> List[Document]:
     return resolve_parent_documents(documents)
 
 
+@safe_traceable(name="classify_intent", run_type="chain", tags=["dual-mode-rag", "intent"])
 def classify_intent_node(state: AgentState) -> dict[str, Any]:
     """Route empty or summary-oriented questions to global document summarization."""
     question = state.get("question", "").strip()
@@ -87,15 +97,24 @@ def _image_metadata(documents: List[Document]) -> tuple[bool, List[str]]:
     except ModuleNotFoundError:
         from guardrails.output_guard import sanitize_image_url
 
-    urls = [
-        safe_url
-        for document in documents
-        if (safe_url := sanitize_image_url(document.metadata.get("image_url")))
-        and safe_url != "[BLOCKED_SUSPICIOUS_IMAGE_URL]"
-    ]
-    return bool(urls), list(dict.fromkeys(urls))
+    urls: list[str] = []
+    for document in documents:
+        meta = document.metadata or {}
+        # Single primary image_url
+        if primary := meta.get("image_url"):
+            if (safe := sanitize_image_url(primary)) and safe != "[BLOCKED_SUSPICIOUS_IMAGE_URL]":
+                urls.append(safe)
+        # List of image_urls on this page/document
+        for raw_url in meta.get("image_urls", []):
+            if (safe := sanitize_image_url(raw_url)) and safe != "[BLOCKED_SUSPICIOUS_IMAGE_URL]":
+                urls.append(safe)
+
+    unique_urls = list(dict.fromkeys(urls))
+    return bool(unique_urls), unique_urls
 
 
+
+@safe_traceable(name="retrieve_summary", run_type="retriever", tags=["dual-mode-rag", "retriever", "summary"])
 def retrieve_summary_node(state: AgentState) -> dict[str, Any]:
     """Fetch a broad set of macro-parent contexts for document-level summaries."""
     try:
@@ -118,6 +137,7 @@ def retrieve_summary_node(state: AgentState) -> dict[str, Any]:
     }
 
 
+@safe_traceable(name="retrieve_targeted", run_type="retriever", tags=["dual-mode-rag", "retriever", "targeted"])
 def retrieve_targeted_node(state: AgentState) -> dict[str, Any]:
     """Use weighted hybrid retrieval, then reconstruct unique parent contexts."""
     session_id = state.get("session_id", "")
@@ -205,6 +225,7 @@ For zero relevant context, state exactly: "The requested information is not avai
 """
 
 
+@safe_traceable(name="generate_summary", run_type="llm", tags=["dual-mode-rag", "generate", "summary"])
 def generate_summary_node(state: AgentState) -> dict[str, Any]:
     """Generate a structured topic-tree summary from diverse parent contexts."""
     prompt = f"""{CONFLICT_AWARE_SYSTEM_PROMPT}
@@ -222,6 +243,7 @@ Persistent working memory:
     return {"structured_result": result}
 
 
+@safe_traceable(name="generate_targeted", run_type="llm", tags=["dual-mode-rag", "generate", "targeted"])
 def generate_targeted_node(state: AgentState) -> dict[str, Any]:
     """Generate a structured targeted answer with evidence, citations, and conflict reporting."""
     prompt = f"""{CONFLICT_AWARE_SYSTEM_PROMPT}
@@ -246,6 +268,7 @@ def _table(value: str | None) -> str:
     return f"\n\n{value.strip()}" if value and value.strip() else ""
 
 
+@safe_traceable(name="format_markdown", run_type="chain", tags=["dual-mode-rag", "format"])
 def format_markdown_node(state: AgentState) -> dict[str, Any]:
     """Render either structured response schema as clean Markdown."""
     try:
@@ -293,6 +316,7 @@ def format_markdown_node(state: AgentState) -> dict[str, Any]:
     }
 
 
+@safe_traceable(name="persist_memory", run_type="chain", tags=["dual-mode-rag", "memory", "sqlite"])
 def persist_memory_node(state: AgentState) -> dict[str, Any]:
     """Persist the final graph answer and UI follow-up chips to SQLite."""
     try:
